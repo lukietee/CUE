@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type {
   CueAPI,
@@ -171,6 +171,8 @@ function App() {
     [confirm, setConfirm] = useState<'start' | 'stop' | 'metadata' | 'delete' | null>(null),
     [obs, setObs] = useState({ host: '127.0.0.1', port: 4455, password: '' }),
     [tick, setTick] = useState(Date.now());
+  const obsPasswordRef = useRef<HTMLInputElement>(null);
+  const [showObsPassword, setShowObsPassword] = useState(false);
   const [authorizationStartedAt, setAuthorizationStartedAt] = useState(0);
   const [dismissedBackendError, setDismissedBackendError] = useState('');
   const planSignature = JSON.stringify(snapshot?.plan ?? null);
@@ -1622,16 +1624,30 @@ function App() {
                         />
                       </label>
                     </div>
-                    <label>
-                      WebSocket password
+                    <label htmlFor="obs-websocket-password">WebSocket password</label>
+                    <div className="password-field">
                       <input
-                        type="password"
+                        id="obs-websocket-password"
+                        ref={obsPasswordRef}
+                        type={showObsPassword ? 'text' : 'password'}
                         autoComplete="off"
+                        spellCheck={false}
+                        aria-describedby="obs-password-help"
                         value={obs.password}
                         onChange={(e) => setObs({ ...obs, password: e.target.value })}
-                        placeholder="Your OBS password"
+                        placeholder="Paste your OBS WebSocket password"
                       />
-                    </label>
+                      <button
+                        type="button"
+                        className="password-visibility"
+                        aria-label={showObsPassword ? 'Hide password' : 'Show password'}
+                        aria-pressed={showObsPassword}
+                        aria-controls="obs-websocket-password"
+                        onClick={() => setShowObsPassword((visible) => !visible)}
+                      >
+                        {showObsPassword ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
                     <button
                       className="secondary"
                       disabled={!!busy}
@@ -1641,8 +1657,17 @@ function App() {
                           async () => {
                             if (snapshot.obs.connected) await api!.disconnect('obs');
                             else {
-                              await api!.connectObs(obs);
-                              setObs((p) => ({ ...p, password: '' }));
+                              try {
+                                await api!.connectObs(obs);
+                                setObs((p) => ({ ...p, password: '' }));
+                                setShowObsPassword(false);
+                              } catch (error) {
+                                requestAnimationFrame(() => {
+                                  obsPasswordRef.current?.focus();
+                                  obsPasswordRef.current?.select();
+                                });
+                                throw error;
+                              }
                             }
                           },
                         )
@@ -1650,8 +1675,10 @@ function App() {
                     >
                       {snapshot.obs.connected ? 'Disconnect OBS' : 'Connect OBS'}
                     </button>
-                    <p className="fineprint left">
-                      OBS password is sent to the main process for connection and never logged.
+                    <p id="obs-password-help" className="fineprint left">
+                      {snapshot.obs.connected
+                        ? 'Connected. The password was cleared from this form. Disconnect before applying new connection details.'
+                        : 'Use the server password from OBS → Tools → WebSocket Server Settings → Show Connect Info.'}
                     </p>
                   </section>
                   <div>
@@ -1668,11 +1695,18 @@ function App() {
                           type="checkbox"
                           checked={snapshot.settings.demo}
                           disabled={!!busy || live}
-                          onChange={(e) =>
-                            void run('Switching workspace', () =>
-                              api!.updateSettings({ demo: e.target.checked }),
-                            )
-                          }
+                          onChange={(e) => {
+                            const demo = e.target.checked;
+                            void run('Switching workspace', async () => {
+                              await api!.updateSettings({ demo });
+                              setObs((previous) => ({ ...previous, password: '' }));
+                              setShowObsPassword(false);
+                              if (!demo) {
+                                setNotice('Production Mode is on. Enter your OBS WebSocket password, then connect OBS.');
+                                requestAnimationFrame(() => obsPasswordRef.current?.focus());
+                              }
+                            });
+                          }}
                         />
                       </label>
                       {live && (
