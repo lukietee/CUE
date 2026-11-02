@@ -15,6 +15,9 @@ declare global {
     cue?: CueAPI;
   }
 }
+// Platform spacing reserves the native macOS traffic-light area without drawing fake controls.
+document.documentElement.dataset.platform = /mac/i.test(navigator.platform) ? 'mac' : 'other';
+document.documentElement.dataset.shell = window.cue ? 'desktop' : 'preview';
 type View = 'studio' | 'setup' | 'live' | 'recap' | 'settings';
 const modes: Record<DirectorMode, { name: string; description: string }> = {
   reality_tv: {
@@ -146,13 +149,20 @@ function download(name: string, content: string, type: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
+function loadBriefDraft() {
+  try {
+    return localStorage.getItem('cue.streamBrief')?.slice(0, 4000) ?? '';
+  } catch {
+    return '';
+  }
+}
 function App() {
   const [snapshot, setSnapshot] = useState<CueSnapshot | null>(null),
     [view, setView] = useState<View>('studio'),
     [busy, setBusy] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
-    [brief, setBrief] = useState(''),
+    [brief, setBrief] = useState(loadBriefDraft),
     [mode, setMode] = useState<DirectorMode>('reality_tv'),
     [draft, setDraft] = useState<StreamPlan | null>(null),
     [readiness, setReadiness] = useState<ReadinessReport | null>(null),
@@ -170,6 +180,13 @@ function App() {
   const visibleError =
     error || (backendErrorSignature !== dismissedBackendError ? snapshot?.error : null);
   const api = window.cue;
+  useEffect(() => {
+    try {
+      localStorage.setItem('cue.streamBrief', brief);
+    } catch {
+      /* Local storage can be unavailable in restricted previews. */
+    }
+  }, [brief]);
   const authorization = snapshot?.events.findLast(
     (e) => e.kind === 'twitch.authorization' && Date.parse(e.ts) >= authorizationStartedAt,
   );
@@ -202,6 +219,7 @@ function App() {
   }, [api]);
   useEffect(() => {
     window.scrollTo(0, 0);
+    document.querySelector<HTMLElement>('.main')?.scrollTo(0, 0);
   }, [view]);
   useEffect(() => {
     if (!confirm) return;
@@ -327,6 +345,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
+        <div className="window-drag-region" aria-hidden="true" />
         <a
           className="brand"
           href="#"
@@ -362,20 +381,6 @@ function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-show">
-          <span className="sidebar-note-label">THE PRODUCTION DESK</span>
-          <div className="sidebar-note-mark" aria-hidden="true">
-            cue<span>→</span>
-          </div>
-          <p>
-            A plan before you go live.
-            <br />
-            <strong>A producer while you are.</strong>
-          </p>
-          <button className="sidebar-note-link" onClick={() => setView('setup')}>
-            Open your stream plan <Icon name="arrow" size={14} />
-          </button>
-        </div>
         <div className="sidebar-bottom">
           <button
             className={`nav-item ${view === 'settings' ? 'active' : ''}`}

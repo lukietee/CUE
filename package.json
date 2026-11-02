@@ -10,7 +10,8 @@
     "start": "electron dist-electron/main.js",
     "test": "node --import tsx --test packages/**/*.test.ts",
     "check": "tsc --noEmit",
-    "test:desktop": "npm run build && node --import tsx scripts/smoke-desktop.ts"
+    "test:desktop": "npm run build && node --import tsx scripts/smoke-desktop.ts",
+    "test:desktop:dev": "npm run build && node --import tsx scripts/smoke-desktop.ts --dev"
   },
   "dependencies": {
     "electron": "^39.0.0",

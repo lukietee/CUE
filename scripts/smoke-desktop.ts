@@ -5,9 +5,28 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { _electron } from 'playwright';
 import electronPath from 'electron';
+import { createServer } from 'vite';
 
 // This check uses real Electron, preload IPC, core, SQLite and the local overlay server.
 // All session state lives in a disposable directory. It never opens a real broadcast.
+const development = process.argv.includes('--dev');
+let renderRevision = 0;
+const devServer = development
+  ? await createServer({
+      server: { host: '127.0.0.1', port: 0, strictPort: false },
+      plugins: [
+        {
+          name: 'cue-reload-check',
+          transform(code, id) {
+            if (id.endsWith('/src/main.tsx'))
+              return `${code}\ndocument.documentElement.dataset.cueSmokeRevision = '${renderRevision}';`;
+          },
+        },
+      ],
+    })
+  : undefined;
+await devServer?.listen();
+const devUrl = devServer?.resolvedUrls?.local[0];
 const scratch = await mkdtemp(path.join(tmpdir(), 'cue-desktop-check-'));
 const screenshots = path.resolve(
   process.env.CUE_SCREENSHOT_DIR ?? path.join(scratch, 'screenshots'),
@@ -23,7 +42,8 @@ const environment: Record<string, string> = {
   CUE_DEMO_MODE: 'true',
   CUE_OVERLAY_PORT: '0',
 };
-delete environment.CUE_DEV_URL;
+if (devUrl) environment.CUE_DEV_URL = devUrl;
+else delete environment.CUE_DEV_URL;
 delete environment.ELECTRON_RUN_AS_NODE;
 const application = await _electron.launch({
   executablePath: electronPath as unknown as string,
@@ -35,7 +55,10 @@ const errors: string[] = [];
 page.on('pageerror', (error) => errors.push(error.message));
 page.setDefaultTimeout(15_000);
 const shot = async (name: string) => {
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    document.querySelector('.main')?.scrollTo(0, 0);
+  });
   await page.screenshot({ path: path.join(screenshots, `${name}.png`), fullPage: true });
 };
 const snapshot = () => page.evaluate(() => window.cue!.getSnapshot());
@@ -51,6 +74,36 @@ try {
   const browserWindow = await application.browserWindow(page);
   await browserWindow.evaluate((win) => win.setContentSize(1440, 1000));
   await page.getByLabel('Describe your stream').waitFor();
+  if (devServer) {
+    await page.getByLabel('Describe your stream').fill('A demo brief retained across reload');
+    await page.waitForFunction(
+      () => localStorage.getItem('cue.streamBrief') === 'A demo brief retained across reload',
+    );
+    await page.waitForFunction(() => document.documentElement.dataset.cueSmokeRevision === '0');
+    renderRevision = 1;
+    devServer.moduleGraph.invalidateAll();
+    devServer.ws.send({ type: 'full-reload', path: '*' });
+    await page.waitForFunction(() => document.documentElement.dataset.cueSmokeRevision === '1');
+    await page.getByRole('heading', { name: 'Your studio, in view.' }).waitFor();
+    assert.equal(
+      await page.getByLabel('Describe your stream').inputValue(),
+      'A demo brief retained across reload',
+    );
+    console.log(
+      'Vite full reload verified: fresh markup loaded without mixing old layout and new styles.',
+    );
+  }
+  if (process.platform === 'darwin') {
+    const geometry = await browserWindow.evaluate((win) => ({
+      outer: win.getBounds(),
+      content: win.getContentBounds(),
+    }));
+    assert.equal(
+      geometry.outer.height,
+      geometry.content.height,
+      'macOS title bar must be integrated into content',
+    );
+  }
   await shot('studio');
   await page
     .getByLabel('Describe your stream')
@@ -140,6 +193,7 @@ try {
     .evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((win) => win.destroy()))
     .catch(() => {});
   await application.close().catch(() => {});
+  await devServer?.close();
   // Keep screenshots for visual review; remove only the disposable user profile after closing.
   await rm(path.join(scratch, 'profile'), { recursive: true, force: true });
 }
