@@ -381,20 +381,6 @@ function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-show">
-          <span className="sidebar-note-label">THE PRODUCTION DESK</span>
-          <div className="sidebar-note-mark" aria-hidden="true">
-            cue<span>→</span>
-          </div>
-          <p>
-            A plan before you go live.
-            <br />
-            <strong>A producer while you are.</strong>
-          </p>
-          <button className="sidebar-note-link" onClick={() => setView('setup')}>
-            Open your stream plan <Icon name="arrow" size={14} />
-          </button>
-        </div>
         <div className="sidebar-bottom">
           <button
             className={`nav-item ${view === 'settings' ? 'active' : ''}`}

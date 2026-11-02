@@ -2,7 +2,7 @@
 
 CUE uses a light production workspace inspired by the provided dashboard reference: edge-to-edge content, quiet navigation, forest green controls, and flat white cards. The native macOS window supplies the rounded outer corners; there is no second inset web-page frame or separate dark title-bar strip. Real traffic-light controls sit above the sidebar, the header is draggable, and controls remain clickable. The sidebar stays in place while content scrolls. The main composition is an overview row above a stream brief, directing styles, and studio checklist. Every number comes from the active session; no engagement graphs or outcome metrics are invented.
 
-Typography and spacing provide the hierarchy. Numbered sections and directing styles replace decorative sparkle imagery and repeated icon badges. Icons remain on navigation and controls where they clarify an action. A dark green production note and featured session card anchor the otherwise light workspace.
+Typography and spacing provide the hierarchy. Numbered sections and directing styles replace decorative sparkle imagery and repeated icon badges. Icons remain on navigation and controls where they clarify an action. The featured session card anchors the otherwise light workspace. Sidebar navigation is kept minimal, with settings at the bottom.
 
 The same colors, controls, field treatments and spacing apply to the plan editor, live desk, recap, settings, confirmations, errors, and Twitch authorization. Permission controls and explicit stream start/stop confirmations remain functional. Connection labels distinguish OBS connectivity from actual broadcasting, and the director has a standby state outside active production.
 
