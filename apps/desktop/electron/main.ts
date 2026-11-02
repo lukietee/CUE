@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, nativeTheme } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
@@ -25,6 +25,12 @@ try {
 } catch {
   /* .env is optional */
 }
+// Keep existing sessions and encrypted credentials in the same directory when
+// giving the development app its product name (the default is often Electron).
+const existingUserData = app.getPath('userData');
+app.setName('CUE');
+app.setPath('userData', existingUserData);
+nativeTheme.themeSource = 'light';
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 let win: BrowserWindow;
 let service: CueService;
@@ -142,7 +148,15 @@ async function boot() {
     height: 960,
     minWidth: 1000,
     minHeight: 720,
-    backgroundColor: '#ecefeb',
+    show: false,
+    backgroundColor: '#f6f8f5',
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 20, y: 18 },
+          roundedCorners: true,
+        }
+      : {}),
     title: 'CUE · Your stream. Right on cue.',
     webPreferences: {
       preload: path.join(dirname, 'preload.cjs'),
@@ -150,6 +164,9 @@ async function boot() {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => {
