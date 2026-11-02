@@ -201,6 +201,9 @@ function App() {
     };
   }, [api]);
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
+  useEffect(() => {
     if (!confirm) return;
     const previous = document.activeElement as HTMLElement | null;
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
@@ -350,6 +353,7 @@ function App() {
               key={id}
               className={`nav-item ${view === id ? 'active' : ''}`}
               aria-current={view === id ? 'page' : undefined}
+              aria-label={label}
               onClick={() => setView(id)}
             >
               <Icon name={icon} />
@@ -376,6 +380,7 @@ function App() {
           <button
             className={`nav-item ${view === 'settings' ? 'active' : ''}`}
             aria-current={view === 'settings' ? 'page' : undefined}
+            aria-label="Settings"
             onClick={() => setView('settings')}
           >
             <Icon name="settings" />
