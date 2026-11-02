@@ -6,7 +6,7 @@
     'Segoe UI',
     sans-serif;
   color: #202720;
-  background: #e9ece7;
+  background: #f6f8f5;
   color-scheme: light;
   font-synthesis: none;
   font-size: 14px;
@@ -24,10 +24,17 @@
 * {
   box-sizing: border-box;
 }
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
 body {
   margin: 0;
-  padding: 24px;
+  padding: 0;
   min-width: 320px;
+  overflow: hidden;
 }
 button,
 input,
@@ -100,27 +107,52 @@ svg {
   flex-shrink: 0;
 }
 .app-shell {
-  max-width: 1680px;
-  min-height: calc(100vh - 48px);
-  margin: 0 auto;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  margin: 0;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   background: var(--canvas);
-  border: 1px solid #fff;
-  border-radius: 26px;
-  overflow: clip;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
 }
 .sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-self: start;
-  position: sticky;
-  top: 24px;
-  height: calc(100vh - 50px);
-  min-height: 680px;
-  padding: 34px 20px 18px;
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+  padding: 28px 20px 18px;
   background: #fcfdfb;
   border-right: 1px solid #eef0eb;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.window-drag-region {
+  display: none;
+}
+html[data-shell='desktop'][data-platform='mac'] .window-drag-region {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+html[data-shell='desktop'][data-platform='mac'] .sidebar {
+  padding-top: 64px;
+}
+html[data-shell='desktop'] .topbar {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+html[data-shell='desktop'] :is(button, a, input, textarea, select, label, [role='dialog']) {
+  -webkit-app-region: no-drag;
 }
 .brand {
   display: grid;
@@ -362,12 +394,20 @@ svg {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 90px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+  min-height: 72px;
   gap: 18px;
   padding: 0 34px;
   background: #fcfdfb;
@@ -465,7 +505,7 @@ svg {
 .page {
   flex: 1;
   width: 100%;
-  padding: 32px 34px 34px;
+  padding: 26px 32px 30px;
 }
 .eyebrow {
   display: inline-flex;
@@ -524,8 +564,8 @@ svg {
   align-items: flex-start;
   position: relative;
   min-width: 0;
-  min-height: 153px;
-  padding: 21px 22px 20px;
+  min-height: 134px;
+  padding: 18px 21px;
   border: 1px solid #edf0e9;
   border-radius: 21px;
   background: #fff;
@@ -563,7 +603,7 @@ svg {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 15px;
+  margin-top: 12px;
   font-size: 11px;
   line-height: 1.5;
   color: #626e5c;
@@ -2110,16 +2150,11 @@ select {
   }
 }
 @media (max-width: 1200px) {
-  body {
-    padding: 16px;
-  }
   .app-shell {
     grid-template-columns: 190px minmax(0, 1fr);
-    min-height: calc(100vh - 32px);
   }
   .sidebar {
-    top: 16px;
-    height: calc(100vh - 34px);
+    height: 100%;
     padding: 30px 16px 18px;
   }
   .nav-item.active::before {
@@ -2144,7 +2179,7 @@ select {
   }
   .topbar {
     padding: 0 25px;
-    min-height: 80px;
+    min-height: 68px;
   }
   .topbar-profile strong {
     max-width: 100px;
@@ -2296,18 +2331,96 @@ select {
     display: none;
   }
 }
-@media (max-width: 760px) {
-  body {
-    padding: 10px;
+@media (min-width: 761px) and (max-width: 1040px) {
+  .studio-overview {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
   }
+  .overview-card {
+    min-height: 128px;
+    padding: 17px 13px;
+  }
+  .overview-card > strong {
+    font-size: 29px;
+  }
+  .overview-featured > strong {
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .overview-label {
+    font-size: 11px;
+  }
+  .overview-detail {
+    font-size: 10px;
+  }
+  .overview-featured > .overview-tag {
+    position: static;
+    margin-top: 7px;
+    font-size: 8px;
+  }
+  .studio-body {
+    grid-template-columns: minmax(0, 1fr) 255px;
+    gap: 16px;
+  }
+  .studio-aside {
+    display: flex;
+    gap: 16px;
+  }
+  .studio-checklist {
+    padding: 20px 16px;
+  }
+  .studio-checklist h2 {
+    font-size: 17px;
+  }
+  .studio-checklist .section-heading-title {
+    gap: 8px;
+  }
+  .checklist-row {
+    gap: 9px;
+  }
+  .checklist-row strong {
+    font-size: 12px;
+  }
+  .checklist-row small {
+    font-size: 10px;
+  }
+  .composer-heading h2 {
+    font-size: 19px;
+  }
+  .brief-bottom > .primary {
+    width: 100%;
+  }
+  .brief-bottom > span {
+    font-size: 10px;
+  }
+  .welcome {
+    padding: 21px;
+  }
+  .mode-section .section-heading > .subtle {
+    display: none;
+  }
+  .mode-grid {
+    gap: 8px;
+  }
+  .mode-card {
+    padding: 13px 9px;
+  }
+  .mode-card h3 {
+    font-size: 11px;
+  }
+  .mode-card p {
+    font-size: 9px;
+  }
+  .session-note {
+    min-height: 0;
+  }
+}
+@media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 155px minmax(0, 1fr);
-    border-radius: 20px;
-    min-height: calc(100vh - 20px);
   }
   .sidebar {
-    top: 10px;
-    height: calc(100vh - 22px);
+    height: 100%;
     padding: 27px 12px 17px;
   }
   .brand {
@@ -2489,19 +2602,17 @@ select {
   }
 }
 @media (max-width: 580px) {
-  body {
-    padding: 7px;
-  }
   .app-shell {
-    display: block;
-    border-radius: 17px;
-    min-height: calc(100vh - 14px);
+    display: flex;
+    flex-direction: column;
   }
   .sidebar {
     position: relative;
     top: 0;
     width: 100%;
     height: auto;
+    flex-shrink: 0;
+    overflow: visible;
     min-height: 0;
     padding: 20px 17px 13px;
     border-right: 0;
@@ -2523,6 +2634,10 @@ select {
   .sidebar-show,
   .profile {
     display: none;
+  }
+  .main {
+    flex: 1;
+    min-height: 0;
   }
   .sidebar nav {
     flex-direction: row;
