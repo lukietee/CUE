@@ -64,7 +64,9 @@ try {
       void stop(code ?? (signal ? 1 : 0), false);
     });
     console.log(`CUE renderer: ${rendererUrl}`);
-    console.log('Renderer edits reload automatically. Restart npm run dev after main/preload changes.');
+    console.log(
+      'Renderer edits reload automatically. Restart npm run dev after main/preload changes.',
+    );
   }
 } catch (error) {
   console.error('CUE development startup failed:', error instanceof Error ? error.message : error);

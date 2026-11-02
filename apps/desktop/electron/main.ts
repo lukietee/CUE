@@ -4,6 +4,10 @@ import path from 'node:path';
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { z } from 'zod';
 import { ModelPlanner } from '../../../packages/agent/provider.ts';
+import {
+  normalizeRendererEntryUrl,
+  isAllowedRendererNavigation,
+} from '../../../packages/shared/navigation.ts';
 import { CueService } from '../../../packages/core/index.ts';
 import { Storage } from '../../../packages/storage/index.ts';
 import {
@@ -32,6 +36,9 @@ app.setName('CUE');
 app.setPath('userData', existingUserData);
 nativeTheme.themeSource = 'light';
 const dirname = path.dirname(fileURLToPath(import.meta.url));
+const rendererEntry = normalizeRendererEntryUrl(
+  process.env.CUE_DEV_URL ?? new URL('../dist/index.html', import.meta.url).href,
+);
 let win: BrowserWindow;
 let service: CueService;
 let overlay: OverlayServer;
@@ -170,8 +177,7 @@ async function boot() {
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => {
-    const allowed = process.env.CUE_DEV_URL ?? new URL('../dist/index.html', import.meta.url).href;
-    if (url !== allowed) event.preventDefault();
+    if (!isAllowedRendererNavigation(url, rendererEntry)) event.preventDefault();
   });
   service.on('snapshot', (snapshot) => {
     if (!win.isDestroyed()) win.webContents.send('cue:snapshot', snapshot);
@@ -265,7 +271,7 @@ async function boot() {
   bind('injectDemo', none, () => service.injectDemo());
   bind('deleteHistory', none, () => service.deleteHistory());
   bind('disconnect', z.tuple([z.enum(['twitch', 'obs'])]), (s) => service.disconnect(s));
-  if (process.env.CUE_DEV_URL) await win.loadURL(process.env.CUE_DEV_URL);
+  if (process.env.CUE_DEV_URL) await win.loadURL(rendererEntry);
   else await win.loadFile(path.join(dirname, '../dist/index.html'));
   let checking = false;
   healthTimer = setInterval(() => {

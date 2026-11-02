@@ -149,13 +149,20 @@ function download(name: string, content: string, type: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
+function loadBriefDraft() {
+  try {
+    return localStorage.getItem('cue.streamBrief')?.slice(0, 4000) ?? '';
+  } catch {
+    return '';
+  }
+}
 function App() {
   const [snapshot, setSnapshot] = useState<CueSnapshot | null>(null),
     [view, setView] = useState<View>('studio'),
     [busy, setBusy] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
-    [brief, setBrief] = useState(''),
+    [brief, setBrief] = useState(loadBriefDraft),
     [mode, setMode] = useState<DirectorMode>('reality_tv'),
     [draft, setDraft] = useState<StreamPlan | null>(null),
     [readiness, setReadiness] = useState<ReadinessReport | null>(null),
@@ -173,6 +180,13 @@ function App() {
   const visibleError =
     error || (backendErrorSignature !== dismissedBackendError ? snapshot?.error : null);
   const api = window.cue;
+  useEffect(() => {
+    try {
+      localStorage.setItem('cue.streamBrief', brief);
+    } catch {
+      /* Local storage can be unavailable in restricted previews. */
+    }
+  }, [brief]);
   const authorization = snapshot?.events.findLast(
     (e) => e.kind === 'twitch.authorization' && Date.parse(e.ts) >= authorizationStartedAt,
   );

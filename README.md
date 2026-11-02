@@ -74,6 +74,6 @@ The project remote is [lukietee/CUE](https://github.com/lukietee/CUE). Changes a
 
 ## Validation limits
 
-The build and all 39 core/integration tests pass with installed dependencies, including the real local HTTP/WebSocket overlay check. `npm run test:desktop` also passes against a real Electron window and isolated Demo Mode profile, including confirmations, cue execution, pause, recap export, and desktop/compact/narrow screenshots. See [design and visual checks](docs/DESIGN.md).
+The build and all 43 core/integration tests pass with installed dependencies, including the real local HTTP/WebSocket overlay check. `npm run test:desktop` also passes against a real Electron window and isolated Demo Mode profile, including confirmations, cue execution, pause, recap export, and desktop/compact/narrow screenshots. See [design and visual checks](docs/DESIGN.md).
 
 Credentialed Twitch/OBS smoke testing is still required; no public broadcast or real-account authorization was performed as part of these checks.

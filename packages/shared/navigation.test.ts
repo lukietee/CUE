@@ -26,7 +26,8 @@ test('development navigation stays limited to the exact local entry document', (
     'javascript:alert(1)',
     'data:text/html,hello',
     'not a URL',
-  ]) assert.equal(isAllowedRendererNavigation(target, entry), false, target);
+  ])
+    assert.equal(isAllowedRendererNavigation(target, entry), false, target);
 });
 
 test('production reload and hash navigation allow only the exact bundled file', () => {
@@ -35,7 +36,10 @@ test('production reload and hash navigation allow only the exact bundled file', 
   assert.equal(isAllowedRendererNavigation(`${entry}#recap`, entry), true);
   assert.equal(isAllowedRendererNavigation('file:///tmp/index.html', entry), false);
   assert.equal(isAllowedRendererNavigation(`${entry}?debug=true`, entry), false);
-  assert.equal(isAllowedRendererNavigation(entry.replace('index.html', 'settings.html'), entry), false);
+  assert.equal(
+    isAllowedRendererNavigation(entry.replace('index.html', 'settings.html'), entry),
+    false,
+  );
 });
 
 test('untrusted entry configuration fails closed', () => {
