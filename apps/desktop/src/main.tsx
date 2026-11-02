@@ -15,6 +15,9 @@ declare global {
     cue?: CueAPI;
   }
 }
+// Platform spacing reserves the native macOS traffic-light area without drawing fake controls.
+document.documentElement.dataset.platform = /mac/i.test(navigator.platform) ? 'mac' : 'other';
+document.documentElement.dataset.shell = window.cue ? 'desktop' : 'preview';
 type View = 'studio' | 'setup' | 'live' | 'recap' | 'settings';
 const modes: Record<DirectorMode, { name: string; description: string }> = {
   reality_tv: {
@@ -202,6 +205,7 @@ function App() {
   }, [api]);
   useEffect(() => {
     window.scrollTo(0, 0);
+    document.querySelector<HTMLElement>('.main')?.scrollTo(0, 0);
   }, [view]);
   useEffect(() => {
     if (!confirm) return;
@@ -327,6 +331,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
+        <div className="window-drag-region" aria-hidden="true" />
         <a
           className="brand"
           href="#"
