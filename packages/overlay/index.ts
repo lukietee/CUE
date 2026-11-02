@@ -42,12 +42,12 @@ export class OverlayServer {
       const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
       const origin = req.headers.origin;
       if (!this.authorized(req.url, req.headers.host) || path !== '/ws' || (origin && origin !== `http://127.0.0.1:${this.boundPort}`)) { socket.destroy(); return; }
-      wss.handleUpgrade(req, socket, head, ws => wss.emit('connection',ws,req));
+      wss.handleUpgrade(req, socket, head, (ws: WebSocket) => wss.emit('connection',ws,req));
     });
-    wss.on('connection', ws => {
+    wss.on('connection', (ws: WebSocket) => {
       ws.on('error', () => {});
       if (this.latest) ws.send(JSON.stringify({ revision:this.revision, message:this.latest }));
-      ws.on('message', data => { try { const ack = JSON.parse(data.toString()).ack; if (Number.isInteger(ack) && ack === this.revision) this.acknowledgedRevision = ack; } catch {} });
+      ws.on('message', (data: Buffer) => { try { const ack = JSON.parse(data.toString()).ack; if (Number.isInteger(ack) && ack === this.revision) this.acknowledgedRevision = ack; } catch {} });
     });
     await new Promise<void>((resolve,reject) => {
       server.once('error', reject);

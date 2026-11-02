@@ -1,5 +1,7 @@
 # OBS integration
 
+The adapter uses a small native `ws` transport for OBS 5.x JSON RPC: challenge-response authentication, identified handshake, correlated requests, and timeouts. It does not require `obs-websocket-js`.
+
 `RealObsAdapter({host?, port?, password?, onConnectionChange?})` implements the shared adapter. `MockObsAdapter()` uses the same async interface and exposes `overlayUrl` for tests. Both also provide `getCurrentScene()`.
 
 Enable OBS Studio's **Tools → WebSocket Server Settings**, use port 4455 and its password. CUE supports loopback connections only. Core must perform explicit start/stop confirmation before invoking adapter methods. An accepted StartStream request does not mean OBS has finished connecting to Twitch: poll `getStreamStatus()` to verify active output. Connection loss invokes the callback with false; call `connect()` again to reconnect and stage the overlay again. Errors propagate as recoverable failures.

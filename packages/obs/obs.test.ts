@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import OBSWebSocket from 'obs-websocket-js';
+import type { ObsClient } from './transport.ts';
 import { MockObsAdapter, RealObsAdapter } from './index.ts';
 
 test('mock OBS models actual connection and stream state independently',async()=>{
@@ -30,7 +30,7 @@ test('real staging reuses input and scene item across retries and verifies brows
    default:return {};
   }
  }};
- const obs=new RealObsAdapter({},fake as unknown as OBSWebSocket);
+ const obs=new RealObsAdapter({},fake as unknown as ObsClient);
  await obs.connect(); await obs.ensureOverlaySource('http://127.0.0.1:4318/?token=x'); await obs.ensureOverlaySource('http://127.0.0.1:4318/?token=x');
  assert.equal(calls.filter(n=>n==='CreateInput').length,1);
  assert.equal(calls.filter(n=>n==='CreateSceneItem').length,0);

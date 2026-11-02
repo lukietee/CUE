@@ -1,4 +1,4 @@
-import OBSWebSocket from 'obs-websocket-js';
+import { NativeObsClient, type ObsClient } from './transport.ts';
 import type { ObsAdapter } from '../shared/index.ts';
 
 export type ObsConfig = { host?: string; port?: number; password?: string; onConnectionChange?: (connected: boolean) => void };
@@ -6,7 +6,7 @@ export type ObsConfig = { host?: string; port?: number; password?: string; onCon
 export class RealObsAdapter implements ObsAdapter {
   private connected = false;
   private staging: Promise<void> | null = null;
-  constructor(private config: ObsConfig = {}, private client = new OBSWebSocket()) {
+  constructor(private config: ObsConfig = {}, private client: ObsClient = new NativeObsClient()) {
     client.on('ConnectionClosed', () => { this.connected = false; config.onConnectionChange?.(false); });
     client.on('ConnectionError', () => { this.connected = false; config.onConnectionChange?.(false); });
   }
