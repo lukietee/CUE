@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -71,9 +71,19 @@ try {
   await page.waitForFunction(async () => (await window.cue!.getSnapshot()).status === 'ended');
   await page.getByRole('button', { name: 'Markdown', exact: true }).waitFor();
   await shot('recap');
-  const download = page.waitForEvent('download');
+  const exportPath = path.join(scratch, 'cue-recap.md');
+  await application.evaluate(({ session }, savePath) => {
+    session.defaultSession.once('will-download', (_event, item) => item.setSavePath(savePath));
+  }, exportPath);
   await page.getByRole('button', { name: 'Markdown', exact: true }).click();
-  assert.equal((await download).suggestedFilename(), 'cue-recap.md');
+  const deadline = Date.now() + 10000;
+  let exported = '';
+  while (Date.now() < deadline) {
+    exported = await readFile(exportPath, 'utf8').catch(() => '');
+    if (exported.includes('# ')) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.match(exported, /# /, 'Markdown export must save a real recap file');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await shot('settings');
   await browserWindow.evaluate((win) => { win.setMinimumSize(360, 600); win.setContentSize(760, 900); });
