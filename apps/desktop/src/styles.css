@@ -254,6 +254,7 @@ select { cursor: pointer; }
 .preview-center p { color: #626e5c; font-size: 12px; margin-top: 10px; }
 .production-mark { display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; color: #72945a; font-size: 20px; }
 .cue-glyph { display: inline-flex; align-items: center; font-size: 32px; font-weight: 550; letter-spacing: -2px; }
+.cue-glyph.small { flex-shrink: 0; font-size: 15px; letter-spacing: -.5px; color: #626e5c; }
 .cue-glyph > span { font-size: 25px; margin-left: 3px; }
 .preview-channel-mark { color: #4b6940; font-size: 32px; letter-spacing: -2px; font-weight: 600; margin-bottom: 19px; }
 .preview-channel-mark > span { display: block; color: #626e5c; font-size: 8px; letter-spacing: 3px; text-align: center; margin-top: 6px; }
