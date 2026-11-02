@@ -142,7 +142,7 @@ async function boot() {
     height: 960,
     minWidth: 1000,
     minHeight: 720,
-    backgroundColor: '#101014',
+    backgroundColor: '#ecefeb',
     title: 'CUE · Your stream. Right on cue.',
     webPreferences: {
       preload: path.join(dirname, 'preload.cjs'),

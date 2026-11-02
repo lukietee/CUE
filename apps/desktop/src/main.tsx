@@ -16,27 +16,19 @@ declare global {
   }
 }
 type View = 'studio' | 'setup' | 'live' | 'recap' | 'settings';
-const modes: Record<DirectorMode, { name: string; description: string; icon: string }> = {
+const modes: Record<DirectorMode, { name: string; description: string }> = {
   reality_tv: {
     name: 'Reality TV',
-    description: 'Big moments. Chat in the driver’s seat.',
-    icon: 'spark',
+    description: 'Playful cues and audience participation.',
   },
   documentary: {
     name: 'Documentary',
-    description: 'A little context. A compelling story.',
-    icon: 'film',
+    description: 'Context, clear narration, and calm captions.',
   },
-  chill: { name: 'Chill', description: 'Less production. More conversation.', icon: 'moon' },
+  chill: { name: 'Chill', description: 'Fewer overlays. More room to talk.' },
 };
 function Icon({ name, size = 19 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
-    spark: (
-      <>
-        <path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z" />
-        <path d="m20 2 .5 1.5L22 4l-1.5.5L20 6l-.5-1.5L18 4l1.5-.5Z" />
-      </>
-    ),
     studio: (
       <>
         <rect x="3" y="4" width="18" height="14" rx="3" />
@@ -134,7 +126,7 @@ function Icon({ name, size = 19 }: { name: string; size?: number }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {paths[name] || paths.spark}
+      {paths[name] || paths.studio}
     </svg>
   );
 }
@@ -208,6 +200,9 @@ function App() {
       off();
     };
   }, [api]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
   useEffect(() => {
     if (!confirm) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -308,11 +303,22 @@ function App() {
   const live = snapshot?.status === 'live',
     ended = snapshot?.status === 'ended';
   const elapsed = snapshot?.startedAt
-    ? Math.max(0, (tick - new Date(snapshot.startedAt).getTime()) / 1000)
+    ? Math.max(
+        0,
+        ((ended
+          ? Date.parse(
+              snapshot.events.findLast((e) => e.kind === 'stream.ended')?.ts ?? snapshot.startedAt,
+            )
+          : tick) -
+          Date.parse(snapshot.startedAt)) /
+          1000,
+      )
     : 0;
+  const broadcasting = !!(live && snapshot?.obs.connected && snapshot.obs.streaming);
+  const directorActive = !!(broadcasting && snapshot?.overlay.staged && !snapshot.paused);
   const chat = snapshot?.events.filter((e) => e.kind.includes('chat')) || [];
   const nav = [
-    ['studio', 'studio', 'Your studio'],
+    ['studio', 'studio', 'Studio'],
     ['setup', 'sliders', 'Stream plan'],
     ['live', 'live', 'Live production'],
     ['recap', 'recap', 'Session recap'],
@@ -330,10 +336,15 @@ function App() {
           }}
           aria-label="CUE home"
         >
-          <span className="brand-symbol">
-            c<span>u</span>e<span className="brand-period">.</span>
+          <span className="brand-monogram" aria-hidden="true">
+            c<span>→</span>
           </span>
-          <span className="brand-caption">YOUR AI PRODUCER</span>
+          <span className="brand-wordmark">
+            <span className="brand-symbol">
+              CUE<span className="brand-period">.</span>
+            </span>
+            <span className="brand-caption">Livestream production</span>
+          </span>
         </a>
         <div className="workspace-label">WORKSPACE</div>
         <nav>
@@ -341,6 +352,8 @@ function App() {
             <button
               key={id}
               className={`nav-item ${view === id ? 'active' : ''}`}
+              aria-current={view === id ? 'page' : undefined}
+              aria-label={label}
               onClick={() => setView(id)}
             >
               <Icon name={icon} />
@@ -350,33 +363,33 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-show">
-          <div className="mini-orbit">
-            <Icon name="spark" size={25} />
+          <span className="sidebar-note-label">THE PRODUCTION DESK</span>
+          <div className="sidebar-note-mark" aria-hidden="true">
+            cue<span>→</span>
           </div>
           <p>
-            A little less juggling.
+            A plan before you go live.
             <br />
-            <strong>A lot more creating.</strong>
+            <strong>A producer while you are.</strong>
           </p>
-          <span>Your stream. Right on cue.</span>
+          <button className="sidebar-note-link" onClick={() => setView('setup')}>
+            Open your stream plan <Icon name="arrow" size={14} />
+          </button>
         </div>
         <div className="sidebar-bottom">
           <button
             className={`nav-item ${view === 'settings' ? 'active' : ''}`}
+            aria-current={view === 'settings' ? 'page' : undefined}
+            aria-label="Settings"
             onClick={() => setView('settings')}
           >
             <Icon name="settings" />
             <span>Settings</span>
           </button>
           <div className="profile">
-            <div className="avatar">
-              {snapshot?.twitch.displayName?.slice(0, 1).toUpperCase() || 'Y'}
-            </div>
-            <div>
-              <strong>{snapshot?.twitch.displayName || 'Your workspace'}</strong>
-              <small>{snapshot?.settings.demo ? 'Demo workspace' : 'Local production'}</small>
-            </div>
-            <span className="status-dot" />
+            <span className="status-dot green" />
+            <span>Local workspace</span>
+            <small>v0.1</small>
           </div>
         </div>
       </aside>
@@ -391,12 +404,20 @@ function App() {
               <span className="status-dot" />
               {snapshot?.settings.demo ? 'Demo Mode' : 'Production Mode'}
             </span>
-            {live && (
+            {broadcasting && (
               <span className="chip on-air">
                 <span className="live-dot" /> ON AIR · {duration(elapsed)}
               </span>
             )}
-            <span className="version">CUE 0.1</span>
+            <div className="topbar-profile">
+              <div className="avatar">
+                {snapshot?.twitch.displayName?.slice(0, 1).toUpperCase() || 'CU'}
+              </div>
+              <div>
+                <strong>{snapshot?.twitch.displayName || 'Your workspace'}</strong>
+                <small>{snapshot?.settings.demo ? 'Demo session' : 'Production session'}</small>
+              </div>
+            </div>
           </div>
         </header>
         {visibleError && (
@@ -434,6 +455,18 @@ function App() {
                 {String(authorization.payload.verificationUri || 'https://www.twitch.tv/activate')}
               </small>
               <p>Review the permissions in Twitch. CUE will continue when you approve.</p>
+              <button
+                className="secondary auth-cancel"
+                onClick={() => {
+                  void api!
+                    .disconnect('twitch')
+                    .catch((error: unknown) =>
+                      setError(error instanceof Error ? error.message : String(error)),
+                    );
+                }}
+              >
+                Cancel connection
+              </button>
             </div>
           </section>
         )}
@@ -446,148 +479,315 @@ function App() {
         <div className={`page page-${view}`}>
           {view === 'studio' && (
             <>
-              <div className="studio-top">
-                <span className="eyebrow">
-                  <span className="status-dot" /> THE CONTROL ROOM IS YOURS
+              <div className="dashboard-heading">
+                <div>
+                  <span className="eyebrow">WORKSPACE OVERVIEW</span>
+                  <h1>Your studio, in view.</h1>
+                  <p>Plan your next stream and keep your production moving.</p>
+                </div>
+                <span className="dashboard-date">
+                  {new Date(tick).toLocaleDateString([], {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
                 </span>
-                <div className="connection-chips">
-                  <span
-                    className={`connection-chip ${snapshot?.twitch.connected ? 'connected' : ''}`}
-                  >
-                    <Icon name="twitch" size={14} />
-                    Twitch <span className="status-dot" />
-                  </span>
-                  <span className={`connection-chip ${snapshot?.obs.connected ? 'connected' : ''}`}>
-                    <Icon name="obs" size={14} />
-                    OBS <span className="status-dot" />
-                  </span>
-                </div>
               </div>
-              <section className="welcome">
-                <div className="hero-art" aria-hidden="true">
-                  <div className="orbit orbit-one" />
-                  <div className="orbit orbit-two" />
-                  <div className="hero-star">
-                    <Icon name="spark" size={43} />
-                  </div>
-                  <span className="orbit-dot" />
-                  <span className="small-star">✧</span>
+              <section className="studio-overview" aria-label="Current session overview">
+                <div className="overview-card overview-featured">
+                  <span className="overview-label">Current session</span>
+                  <strong>
+                    {broadcasting
+                      ? 'On air'
+                      : live
+                        ? 'Interrupted'
+                        : ended
+                          ? 'Completed'
+                          : snapshot?.plan
+                            ? 'In preparation'
+                            : 'Not started'}
+                  </strong>
+                  <span className="overview-detail">
+                    <span className="status-dot" />
+                    {snapshot?.settings.demo ? 'Demo workspace' : 'Local production'}
+                  </span>
+                  <span className="overview-tag">
+                    {broadcasting
+                      ? 'LIVE'
+                      : live
+                        ? 'RECONNECT'
+                        : ended
+                          ? 'COMPLETED'
+                          : snapshot?.plan
+                            ? 'PLAN READY'
+                            : 'STANDBY'}
+                  </span>
                 </div>
-                <div className="eyebrow purple">IDEA IN. GREAT STREAM OUT.</div>
-                <h1>
-                  What are we
-                  <br />
-                  <span>streaming today?</span>
-                </h1>
-                <p className="hero-description">
-                  You bring the idea. I’ll help with the plan, the production,
-                  <br className="desktop-break" /> and all the little moments in between.
-                </p>
-                <form
-                  className="brief-box"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void create();
-                  }}
-                >
-                  <label className="sr-only" htmlFor="brief">
-                    Describe your stream
-                  </label>
-                  <textarea
-                    id="brief"
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value)}
-                    placeholder="A chaotic IRL stream where chat decides what happens next…"
-                    maxLength={4000}
-                    rows={3}
-                  />
-                  <div className="brief-bottom">
-                    <span>
-                      <Icon name="spark" size={15} /> Your next great stream starts here
-                    </span>
-                    <button
-                      className="primary"
-                      type="submit"
-                      disabled={brief.trim().length < 3 || !!busy || !api}
-                    >
-                      Make a plan <Icon name="arrow" size={17} />
-                    </button>
-                  </div>
-                </form>
-                <div className="example-prompts">
-                  <span>Or start with</span>
-                  {['Just Chatting Q&A', 'IRL city walk', 'Gaming challenge'].map((p, i) => (
-                    <button
-                      key={p}
-                      onClick={() =>
-                        setBrief(
-                          [
-                            'A Just Chatting Q&A with my community, fun and interactive',
-                            'An IRL city walk exploring hidden gems with chat',
-                            'A gaming challenge where chat picks the rules',
-                          ][i],
-                        )
-                      }
-                    >
-                      {p}
-                      <Icon name="plus" size={13} />
-                    </button>
-                  ))}
+                <div className="overview-card">
+                  <span className="overview-label">Stream time</span>
+                  <strong>{duration(elapsed)}</strong>
+                  <span className="overview-detail">
+                    {broadcasting
+                      ? 'Broadcast in progress'
+                      : live
+                        ? 'Awaiting OBS reconnection'
+                        : ended
+                          ? 'Last session duration'
+                          : 'Ready when you are'}
+                  </span>
+                </div>
+                <div className="overview-card">
+                  <span className="overview-label">Chat messages</span>
+                  <strong>{chat.length.toLocaleString()}</strong>
+                  <span className="overview-detail">
+                    {snapshot?.twitch.connected ? 'Channel connected' : 'Connect Twitch to listen'}
+                  </span>
+                </div>
+                <div className="overview-card">
+                  <span className="overview-label">Verified cues</span>
+                  <strong>
+                    {snapshot?.actions.filter((a) => a.status === 'succeeded').length || 0}
+                  </strong>
+                  <span className="overview-detail">From this session’s action log</span>
                 </div>
               </section>
-              <section className="mode-section">
-                <div className="section-heading">
-                  <div>
-                    <h2>Set the energy</h2>
-                    <p>Same producer. A different kind of show.</p>
-                  </div>
-                  <span className="subtle">DIRECTOR MODE</span>
-                </div>
-                <div className="mode-grid">
-                  {Object.entries(modes).map(([id, m]) => (
-                    <button
-                      key={id}
-                      className={`mode-card ${mode === id ? 'selected' : ''}`}
-                      onClick={() => setMode(id as DirectorMode)}
-                    >
-                      <div className="mode-card-top">
-                        <span className={`mode-icon ${id}`}>
-                          <Icon name={m.icon} size={21} />
-                        </span>
-                        <span className="radio-mark">{mode === id && <span />}</span>
+              <div className="studio-body">
+                <div className="studio-primary">
+                  <section className="welcome panel">
+                    <div className="composer-heading">
+                      <span className="section-index">01</span>
+                      <div>
+                        <span className="eyebrow">START WITH A BRIEF</span>
+                        <h2>What are we streaming today?</h2>
+                        <p>
+                          A few details are enough. CUE will turn them into an editable stream plan.
+                        </p>
                       </div>
-                      <h3>{m.name}</h3>
-                      <p>{m.description}</p>
-                    </button>
-                  ))}
+                    </div>
+                    <form
+                      className="brief-box"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void create();
+                      }}
+                    >
+                      <label className="sr-only" htmlFor="brief">
+                        Describe your stream
+                      </label>
+                      <textarea
+                        id="brief"
+                        value={brief}
+                        onChange={(e) => setBrief(e.target.value)}
+                        placeholder="An IRL city walk where chat picks the next stop…"
+                        maxLength={4000}
+                        rows={4}
+                      />
+                      <div className="brief-bottom">
+                        <span>Title, segments, tags. All yours to edit.</span>
+                        <button
+                          className="primary"
+                          type="submit"
+                          disabled={brief.trim().length < 3 || !!busy || !api}
+                        >
+                          Create stream plan <Icon name="arrow" size={17} />
+                        </button>
+                      </div>
+                    </form>
+                    <div className="example-prompts">
+                      <span>Try a starting point</span>
+                      {['Just Chatting Q&A', 'IRL city walk', 'Gaming challenge'].map((p, i) => (
+                        <button
+                          key={p}
+                          onClick={() =>
+                            setBrief(
+                              [
+                                'A Just Chatting Q&A with my community, fun and interactive',
+                                'An IRL city walk exploring hidden gems with chat',
+                                'A gaming challenge where chat picks the rules',
+                              ][i],
+                            )
+                          }
+                        >
+                          {p}
+                          <Icon name="plus" size={12} />
+                        </button>
+                      ))}
+                    </div>
+                    {snapshot?.plan && (
+                      <div className="studio-resume">
+                        <div>
+                          <span className="eyebrow">
+                            {broadcasting
+                              ? 'ON AIR'
+                              : live
+                                ? 'SESSION INTERRUPTED'
+                                : ended
+                                  ? 'LAST SESSION'
+                                  : 'CURRENT DRAFT'}
+                          </span>
+                          <strong>{snapshot.plan.title}</strong>
+                        </div>
+                        <button
+                          className="text-button"
+                          onClick={() => setView(live ? 'live' : ended ? 'recap' : 'setup')}
+                        >
+                          {live ? 'Open production' : ended ? 'View recap' : 'Continue editing'}
+                          <Icon name="arrow" size={15} />
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                  <section className="mode-section panel">
+                    <div className="section-heading">
+                      <div className="section-heading-title">
+                        <span className="section-index">02</span>
+                        <div>
+                          <h2>Choose a directing style</h2>
+                          <p>Affects the tone of your cues. Your permissions stay the same.</p>
+                        </div>
+                      </div>
+                      <span className="subtle">DIRECTOR STYLE</span>
+                    </div>
+                    <div className="mode-grid">
+                      {Object.entries(modes).map(([id, m], i) => (
+                        <button
+                          key={id}
+                          className={`mode-card ${mode === id ? 'selected' : ''}`}
+                          aria-pressed={mode === id}
+                          onClick={() => setMode(id as DirectorMode)}
+                        >
+                          <div className="mode-card-top">
+                            <span className="mode-number">0{i + 1}</span>
+                            <span className="radio-mark">{mode === id && <span />}</span>
+                          </div>
+                          <h3>{m.name}</h3>
+                          <p>{m.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 </div>
-              </section>
-              <div className="welcome-footer">
-                <Icon name="check" size={14} />
-                <span>You’re always in control. CUE asks before going live.</span>
+                <aside className="studio-aside">
+                  <section className="studio-checklist panel">
+                    <div className="section-heading">
+                      <div className="section-heading-title">
+                        <span className="section-index">03</span>
+                        <h2>Studio checklist</h2>
+                      </div>
+                      <span className="checklist-count">
+                        {
+                          [
+                            !!snapshot?.plan,
+                            !!snapshot?.twitch.connected,
+                            !!snapshot?.obs.connected,
+                            !!snapshot?.overlay.staged,
+                          ].filter(Boolean).length
+                        }
+                        /4
+                      </span>
+                    </div>
+                    <p className="panel-description">A quick check before you go on air.</p>
+                    <div className="studio-check-list">
+                      {[
+                        {
+                          title: 'Stream plan',
+                          detail: snapshot?.plan
+                            ? 'Your running order is ready'
+                            : 'Add a brief to build your plan',
+                          ok: !!snapshot?.plan,
+                          target: 'setup' as View,
+                        },
+                        {
+                          title: 'Twitch channel',
+                          detail: snapshot?.twitch.connected
+                            ? snapshot.twitch.displayName
+                            : 'Connect chat and channel details',
+                          ok: !!snapshot?.twitch.connected,
+                          target: 'settings' as View,
+                        },
+                        {
+                          title: 'OBS Studio',
+                          detail: snapshot?.obs.connected
+                            ? snapshot.obs.scene || 'Connected to your studio'
+                            : 'Connect your streaming software',
+                          ok: !!snapshot?.obs.connected,
+                          target: 'settings' as View,
+                        },
+                        {
+                          title: 'CUE overlay',
+                          detail: snapshot?.overlay.staged
+                            ? 'Staged in your OBS scene'
+                            : 'Add your audience overlay',
+                          ok: !!snapshot?.overlay.staged,
+                          target: 'setup' as View,
+                        },
+                      ].map((item, i) => (
+                        <button
+                          key={item.title}
+                          className={`checklist-row ${item.ok ? 'complete' : ''}`}
+                          onClick={() => setView(item.target)}
+                        >
+                          <span className="checklist-mark">
+                            {item.ok ? (
+                              <Icon name="check" size={13} />
+                            ) : (
+                              String(i + 1).padStart(2, '0')
+                            )}
+                          </span>
+                          <span className="checklist-copy">
+                            <strong>{item.title}</strong>
+                            <small>{item.detail}</small>
+                          </span>
+                          <Icon name="chevron" size={14} />
+                        </button>
+                      ))}
+                    </div>
+                    <button className="secondary full" onClick={() => setView('setup')}>
+                      Open stream setup
+                      <Icon name="arrow" size={15} />
+                    </button>
+                  </section>
+                  <section className="session-note">
+                    <span className="session-note-kicker">
+                      <span className="status-dot" /> YOUR PRODUCTION, YOUR CALL
+                    </span>
+                    <div className="session-note-grid" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <h3>Keep the final say.</h3>
+                    <p>
+                      CUE handles approved overlays while you stream. Going live and ending a
+                      broadcast always need your confirmation.
+                    </p>
+                    <button className="text-button" onClick={() => setView('settings')}>
+                      Review director permissions
+                      <Icon name="arrow" size={15} />
+                    </button>
+                  </section>
+                </aside>
               </div>
-              {snapshot?.plan && (
-                <button
-                  className="text-button resume"
-                  onClick={() => setView(live ? 'live' : ended ? 'recap' : 'setup')}
-                >
-                  Resume {live ? 'live session' : ended ? 'session recap' : 'your stream plan'}{' '}
-                  <Icon name="arrow" size={15} />
-                </button>
-              )}
             </>
           )}
           {view === 'setup' && (
             <>
               <PageHeading
                 label="PRE-PRODUCTION"
-                title="A great show starts here."
-                subtitle="Give the plan your touch. Then let’s get your studio ready."
+                title="Stream plan"
+                subtitle="Edit your running order, connect your tools, and check your setup."
               />
               {!draft ? (
                 <Empty
                   icon="sliders"
-                  title="Your show is a blank canvas"
+                  title="No stream plan yet"
                   text="Tell CUE what you’re streaming to build your first plan."
                   action={() => setView('studio')}
                   button="Create a stream plan"
@@ -595,148 +795,158 @@ function App() {
               ) : (
                 <div className="setup-layout">
                   <section className="panel plan-panel">
-                    <div className="panel-header">
-                      <div>
-                        <span className="eyebrow purple">YOUR RUN OF SHOW</span>
-                        <h2>Let’s make it yours.</h2>
+                    <fieldset className="editor-fields" disabled={!!busy}>
+                      <div className="panel-header">
+                        <div>
+                          <span className="eyebrow purple">YOUR RUN OF SHOW</span>
+                          <h2>Plan details</h2>
+                        </div>
+                        <span className="chip">
+                          {broadcasting
+                            ? 'On air'
+                            : live
+                              ? 'Connection interrupted'
+                              : ended
+                                ? 'Completed'
+                                : 'Draft plan'}
+                        </span>
                       </div>
-                      <span className="chip">
-                        {live ? 'On air' : ended ? 'Completed' : 'Draft plan'}
-                      </span>
-                    </div>
-                    <label>
-                      Stream title
-                      <input
-                        value={draft.title}
-                        maxLength={140}
-                        onChange={(e) => updatePlan({ title: e.target.value })}
-                      />
-                    </label>
-                    <div className="field-row">
                       <label>
-                        Category
+                        Stream title
                         <input
-                          value={draft.categoryName}
+                          value={draft.title}
+                          maxLength={140}
+                          onChange={(e) => updatePlan({ title: e.target.value })}
+                        />
+                      </label>
+                      <div className="field-row">
+                        <label>
+                          Category
+                          <input
+                            value={draft.categoryName}
+                            onChange={(e) =>
+                              updatePlan({ categoryName: e.target.value, categoryId: undefined })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Category ID <small>for Twitch</small>
+                          <input
+                            value={draft.categoryId || ''}
+                            placeholder="Optional numeric ID"
+                            onChange={(e) =>
+                              updatePlan({ categoryId: e.target.value || undefined })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <label>
+                        Tags <small>comma separated</small>
+                        <input
+                          value={draft.tags.join(', ')}
                           onChange={(e) =>
-                            updatePlan({ categoryName: e.target.value, categoryId: undefined })
+                            updatePlan({ tags: e.target.value.split(',').map((s) => s.trim()) })
                           }
                         />
                       </label>
                       <label>
-                        Category ID <small>for Twitch</small>
-                        <input
-                          value={draft.categoryId || ''}
-                          placeholder="Optional numeric ID"
-                          onChange={(e) => updatePlan({ categoryId: e.target.value || undefined })}
+                        Director mode
+                        <select
+                          value={draft.mode}
+                          onChange={(e) => updatePlan({ mode: e.target.value as DirectorMode })}
+                        >
+                          {Object.entries(modes).map(([id, m]) => (
+                            <option key={id} value={id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Creative brief
+                        <textarea
+                          value={draft.brief}
+                          rows={3}
+                          onChange={(e) => updatePlan({ brief: e.target.value })}
                         />
                       </label>
-                    </div>
-                    <label>
-                      Tags <small>comma separated</small>
-                      <input
-                        value={draft.tags.join(', ')}
-                        onChange={(e) =>
-                          updatePlan({ tags: e.target.value.split(',').map((s) => s.trim()) })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Director mode
-                      <select
-                        value={draft.mode}
-                        onChange={(e) => updatePlan({ mode: e.target.value as DirectorMode })}
-                      >
-                        {Object.entries(modes).map(([id, m]) => (
-                          <option key={id} value={id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Creative brief
-                      <textarea
-                        value={draft.brief}
-                        rows={3}
-                        onChange={(e) => updatePlan({ brief: e.target.value })}
-                      />
-                    </label>
-                    <div className="section-heading segment-heading">
-                      <h3>The running order</h3>
-                      <span className="subtle">
-                        {draft.segments.reduce((n, s) => n + s.durationMin, 0)} MIN TOTAL
-                      </span>
-                    </div>
-                    <div className="segments">
-                      {draft.segments.map((s, i) => (
-                        <div className="segment" key={s.id}>
-                          <div className="segment-number">{String(i + 1).padStart(2, '0')}</div>
-                          <div className="segment-fields">
-                            <input
-                              aria-label={`Segment ${i + 1} name`}
-                              value={s.name}
-                              onChange={(e) =>
-                                updatePlan({
-                                  segments: draft.segments.map((v, j) =>
-                                    j === i ? { ...v, name: e.target.value } : v,
-                                  ),
-                                })
-                              }
-                            />
-                            <input
-                              aria-label={`Segment ${i + 1} goal`}
-                              value={s.goal}
-                              onChange={(e) =>
-                                updatePlan({
-                                  segments: draft.segments.map((v, j) =>
-                                    j === i ? { ...v, goal: e.target.value } : v,
-                                  ),
-                                })
-                              }
-                            />
+                      <div className="section-heading segment-heading">
+                        <h3>The running order</h3>
+                        <span className="subtle">
+                          {draft.segments.reduce((n, s) => n + s.durationMin, 0)} MIN TOTAL
+                        </span>
+                      </div>
+                      <div className="segments">
+                        {draft.segments.map((s, i) => (
+                          <div className="segment" key={s.id}>
+                            <div className="segment-number">{String(i + 1).padStart(2, '0')}</div>
+                            <div className="segment-fields">
+                              <input
+                                aria-label={`Segment ${i + 1} name`}
+                                value={s.name}
+                                onChange={(e) =>
+                                  updatePlan({
+                                    segments: draft.segments.map((v, j) =>
+                                      j === i ? { ...v, name: e.target.value } : v,
+                                    ),
+                                  })
+                                }
+                              />
+                              <input
+                                aria-label={`Segment ${i + 1} goal`}
+                                value={s.goal}
+                                onChange={(e) =>
+                                  updatePlan({
+                                    segments: draft.segments.map((v, j) =>
+                                      j === i ? { ...v, goal: e.target.value } : v,
+                                    ),
+                                  })
+                                }
+                              />
+                            </div>
+                            <label className="segment-time">
+                              <input
+                                type="number"
+                                min={1}
+                                max={240}
+                                aria-label={`Segment ${i + 1} minutes`}
+                                value={s.durationMin}
+                                onChange={(e) =>
+                                  updatePlan({
+                                    segments: draft.segments.map((v, j) =>
+                                      j === i ? { ...v, durationMin: Number(e.target.value) } : v,
+                                    ),
+                                  })
+                                }
+                              />
+                              min
+                            </label>
                           </div>
-                          <label className="segment-time">
-                            <input
-                              type="number"
-                              min={1}
-                              max={240}
-                              aria-label={`Segment ${i + 1} minutes`}
-                              value={s.durationMin}
-                              onChange={(e) =>
-                                updatePlan({
-                                  segments: draft.segments.map((v, j) =>
-                                    j === i ? { ...v, durationMin: Number(e.target.value) } : v,
-                                  ),
-                                })
-                              }
-                            />
-                            min
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="button-row">
-                      <button
-                        className="secondary"
-                        disabled={!!busy}
-                        onClick={() =>
-                          void run('Saving plan', async () => {
-                            await save();
-                            setNotice('Plan saved. You’re one step closer.');
-                          })
-                        }
-                      >
-                        Save plan
-                      </button>
-                      <button
-                        className="secondary"
-                        disabled={!!busy || !snapshot?.twitch.connected}
-                        onClick={() => setConfirm('metadata')}
-                      >
-                        <Icon name="twitch" size={15} />
-                        Apply to Twitch
-                      </button>
-                    </div>
+                        ))}
+                      </div>
+                      <div className="button-row">
+                        <button
+                          className="secondary"
+                          disabled={!!busy}
+                          onClick={() =>
+                            void run('Saving plan', async () => {
+                              await save();
+                              setNotice('Plan saved. You’re one step closer.');
+                            })
+                          }
+                        >
+                          Save plan
+                        </button>
+                        <button
+                          className="secondary"
+                          disabled={!!busy || !snapshot?.twitch.connected}
+                          onClick={() => setConfirm('metadata')}
+                        >
+                          <Icon name="twitch" size={15} />
+                          Apply to Twitch
+                        </button>
+                      </div>
+                    </fieldset>
                   </section>
                   <aside className="setup-side">
                     <section className="panel">
@@ -744,7 +954,9 @@ function App() {
                         <h2>Studio check</h2>
                         <span className="step-count">01 / 02</span>
                       </div>
-                      <p className="panel-description">Get your tools talking to each other.</p>
+                      <p className="panel-description">
+                        Connect your channel and streaming software.
+                      </p>
                       <ConnectionRow
                         icon="twitch"
                         title="Twitch"
@@ -795,11 +1007,13 @@ function App() {
                         A transparent CUE overlay, right in your OBS scene.
                       </p>
                       <div className="overlay-mini">
-                        <Icon name="spark" size={17} />
+                        <span className="cue-glyph" aria-hidden="true">
+                          C
+                        </span>
                         <span>
                           {snapshot?.overlay.staged
                             ? 'CUE Overlay · staged'
-                            : 'Your audience moment goes here'}
+                            : 'CUE browser overlay'}
                         </span>
                       </div>
                       <button
@@ -857,7 +1071,13 @@ function App() {
                       }
                     >
                       <Icon name="live" />
-                      {live ? 'You’re on air' : ended ? 'Session completed' : 'Ready? Go live'}
+                      {broadcasting
+                        ? 'You’re on air'
+                        : live
+                          ? 'Connection interrupted'
+                          : ended
+                            ? 'Session completed'
+                            : 'Ready? Go live'}
                       <Icon name="arrow" size={17} />
                     </button>
                     <p className="fineprint">One final confirmation. Always your call.</p>
@@ -869,8 +1089,10 @@ function App() {
           {view === 'live' && (
             <>
               <PageHeading
-                label={live ? 'ON AIR' : 'PRODUCTION DESK'}
-                title={live ? 'You’re live. We’ve got this.' : 'Your production desk.'}
+                label={
+                  broadcasting ? 'ON AIR' : live ? 'CONNECTION INTERRUPTED' : 'PRODUCTION DESK'
+                }
+                title="Live production"
                 subtitle={
                   snapshot?.plan?.title ||
                   'Plan your stream and connect your studio to get started.'
@@ -910,7 +1132,7 @@ function App() {
                       value={String(
                         snapshot.actions.filter((a) => a.status === 'succeeded').length,
                       )}
-                      icon="spark"
+                      icon="recap"
                     />
                     <Metric
                       label="CURRENT SCENE"
@@ -923,14 +1145,19 @@ function App() {
                       <section className="preview">
                         <div className="preview-top">
                           <span className="preview-label">
-                            <span className={live ? 'live-dot' : 'status-dot'} />
-                            {live ? 'LIVE PRODUCTION' : 'STUDIO STANDBY'}
+                            <span className={broadcasting ? 'live-dot' : 'status-dot'} />
+                            {broadcasting
+                              ? 'LIVE PRODUCTION'
+                              : live
+                                ? 'CONNECTION INTERRUPTED'
+                                : 'STUDIO STANDBY'}
                           </span>
                           <span>{snapshot.settings.demo ? 'SIMULATED STREAM' : 'OBS STATUS'}</span>
                         </div>
                         <div className="preview-center">
-                          <div className="preview-glow" />
-                          <Icon name="live" size={43} />
+                          <div className="preview-channel-mark" aria-hidden="true">
+                            CUE<span>PROGRAM</span>
+                          </div>
                           <h2>{snapshot.obs.scene || 'Your main stage'}</h2>
                           <p>
                             {snapshot.settings.demo
@@ -945,7 +1172,7 @@ function App() {
                         >
                           <span className="overlay-cue">CUE</span>
                           <span>
-                            {snapshot.overlay.text || 'Your next audience moment will appear here.'}
+                            {snapshot.overlay.text || 'No overlay is currently displayed.'}
                           </span>
                         </div>
                         <div className="preview-bottom">
@@ -1030,16 +1257,18 @@ function App() {
                         <div className="panel-header">
                           <h2>
                             <span className="director-icon">
-                              <Icon name="spark" size={17} />
+                              <span className="cue-glyph" aria-hidden="true">
+                                C
+                              </span>
                             </span>
                             Director feed
                           </h2>
-                          <span className={`chip ${snapshot.paused ? '' : 'good'}`}>
-                            {snapshot.paused ? 'Paused' : 'Active'}
+                          <span className={`chip ${directorActive ? 'good' : ''}`}>
+                            {snapshot.paused ? 'Paused' : directorActive ? 'Active' : 'Standby'}
                           </span>
                         </div>
                         <p className="panel-description">
-                          Every cue has a reason. Here’s the thinking.
+                          Observations, decisions, and verified results.
                         </p>
                         <div className="director-actions">
                           {snapshot.actions.length ? (
@@ -1083,10 +1312,12 @@ function App() {
                               })
                           ) : (
                             <div className="director-empty">
-                              <div className="mini-orbit">
-                                <Icon name="spark" size={27} />
+                              <div className="production-mark">
+                                <span className="cue-glyph" aria-hidden="true">
+                                  C
+                                </span>
                               </div>
-                              <h3>Listening for a moment.</h3>
+                              <h3>Waiting for a production cue</h3>
                               <p>
                                 Your director watches for chat activity and opportunities to bring
                                 your audience in.
@@ -1097,7 +1328,7 @@ function App() {
                       </section>
                       <section className="panel director-controls">
                         <div className="panel-header">
-                          <h3>You call the shots</h3>
+                          <h3>Director controls</h3>
                           <Icon name="sliders" size={16} />
                         </div>
                         <label className="toggle-row">
@@ -1152,7 +1383,7 @@ function App() {
                             disabled={!!busy || !live}
                             onClick={() => void run('Injecting demo chat', () => api!.injectDemo())}
                           >
-                            <Icon name="spark" size={16} />
+                            <Icon name="chat" size={16} />
                             Inject chat spike
                           </button>
                         )}
@@ -1197,13 +1428,13 @@ function App() {
             <>
               <PageHeading
                 label="THE WRAP-UP"
-                title="Every stream teaches you something."
-                subtitle="The moments, the decisions, and a little inspiration for next time."
+                title="Session recap"
+                subtitle="Review your session, production decisions, and suggested improvements."
               />
               {!recap ? (
                 <Empty
                   icon="recap"
-                  title={ended ? 'Loading your session recap…' : 'Your story is still unfolding'}
+                  title={ended ? 'Loading your session recap…' : 'No completed session yet'}
                   text={
                     live
                       ? 'End your stream to see its production recap.'
@@ -1227,7 +1458,7 @@ function App() {
                   <div className="live-metrics recap-metrics">
                     <Metric icon="clock" label="ON AIR" value={duration(recap.durationSec)} />
                     <Metric
-                      icon="spark"
+                      icon="recap"
                       label="INTERVENTIONS"
                       value={String(recap.interventions)}
                     />
@@ -1241,7 +1472,7 @@ function App() {
                   <div className="recap-grid">
                     <section className="panel">
                       <div className="panel-header">
-                        <h2>Worth a second look</h2>
+                        <h2>Highlight suggestions</h2>
                         <Icon name="film" />
                       </div>
                       {recap.highlights.length ? (
@@ -1249,7 +1480,9 @@ function App() {
                           <div className="highlight-row" key={`${h.ts}-${i}`}>
                             <span className="highlight-time">{time(h.ts)}</span>
                             <p>{h.text}</p>
-                            <Icon name="spark" size={15} />
+                            <span className="cue-glyph small" aria-hidden="true">
+                              C
+                            </span>
                           </div>
                         ))
                       ) : (
@@ -1261,7 +1494,7 @@ function App() {
                     <section className="panel">
                       <div className="panel-header">
                         <h2>For your next stream</h2>
-                        <Icon name="spark" />
+                        <span className="section-index">02</span>
                       </div>
                       {recap.improvements.map((s, i) => (
                         <div className="improvement" key={i}>
@@ -1273,7 +1506,7 @@ function App() {
                   </div>
                   <div className="recap-footer">
                     <div>
-                      <h3>Your session, to go.</h3>
+                      <h3>Export session recap</h3>
                       <p>Save your recap and production log.</p>
                     </div>
                     <div className="button-row">
@@ -1322,8 +1555,8 @@ function App() {
             <>
               <PageHeading
                 label="YOUR WORKSPACE"
-                title="Make yourself at home."
-                subtitle="Connections, creative preferences, and the boundaries you set."
+                title="Workspace settings"
+                subtitle="Manage connections, director permissions, and local session history."
               />
               {snapshot && (
                 <div className="settings-layout">
@@ -1531,7 +1764,7 @@ function App() {
         </div>
         <footer className="app-footer">
           <span>
-            <span className="status-dot" /> Made for the moments that matter.
+            <span className="status-dot" /> CUE · Local production workspace
           </span>
           <span>Your stream. Right on cue.</span>
         </footer>
@@ -1563,7 +1796,7 @@ function App() {
               {confirm === 'start'
                 ? 'Ready to go live?'
                 : confirm === 'stop'
-                  ? 'Call it a wrap?'
+                  ? 'End this stream?'
                   : confirm === 'delete'
                     ? 'Delete your local history?'
                     : 'Update your Twitch channel?'}
@@ -1639,7 +1872,7 @@ function Empty({
 }) {
   return (
     <div className="empty-state">
-      <div className="mini-orbit">
+      <div className="production-mark">
         <Icon name={icon} size={30} />
       </div>
       <h2>{title}</h2>
@@ -1671,20 +1904,20 @@ function ConnectionRow({
         <strong>{title}</strong>
         <small>{detail}</small>
       </div>
-      <span className={`status-dot ${connected ? 'green' : ''}`} />
+      <span className={`connection-status ${connected ? 'connected' : ''}`}>
+        <span className={`status-dot ${connected ? 'green' : ''}`} />
+        {connected ? 'Connected' : 'Disconnected'}
+      </span>
     </div>
   );
 }
-function Metric({ icon, label, value }: { icon: string; label: string; value: string }) {
+function Metric({ label, value }: { icon?: string; label: string; value: string }) {
   return (
     <div className="metric">
       <div>
         <span className="eyebrow">{label}</span>
         <strong>{value}</strong>
       </div>
-      <span className="metric-icon">
-        <Icon name={icon} size={21} />
-      </span>
     </div>
   );
 }

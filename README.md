@@ -4,6 +4,8 @@
 
 Describe your show, edit a plan, connect your studio, approve going live, and let a bounded director turn repeated chat topics into verified OBS overlay cues. The decision feed records observations, evidence, execution and verification. Finish with a persisted recap and Markdown/JSON exports.
 
+![CUE studio](docs/screenshots/studio.png)
+
 ## Run
 
 Requires Node.js **24+** and npm. Package installation needs internet access, including Electron's platform download.
@@ -68,8 +70,10 @@ git config core.hooksPath .githooks
 
 The hook is already enabled in this workspace. GitHub CLI authentication is configured locally for `lukietee`.
 
-There is no configured remote. Add your intended remote before pushing or creating PRs. A reviewable PR description is prepared in [docs/PULL_REQUEST.md](docs/PULL_REQUEST.md). GitHub prohibits approving a PR with its author's account.
+The project remote is [lukietee/CUE](https://github.com/lukietee/CUE). Changes are developed on feature branches and submitted through pull requests. GitHub prohibits approving a PR with its author's account.
 
 ## Validation limits
 
-Initial implementation checks ran in a sandbox that blocked outbound DNS, loopback listeners, and Electron installation. Existing cached packages were used for local compilation and tests; local ignored declaration fallbacks were needed for unavailable Electron and `ws` types. The network overlay integration explicitly skips only on an `EPERM` bind failure. Run `npm install`, `npm test`, and `npm run build` on an unrestricted desktop for validation with the official dependencies. A credentialed Twitch/OBS smoke test and Electron visual rehearsal are still required; neither a public broadcast nor real-account authorization was performed here.
+The build and all 39 core/integration tests pass with installed dependencies, including the real local HTTP/WebSocket overlay check. `npm run test:desktop` also passes against a real Electron window and isolated Demo Mode profile, including confirmations, cue execution, pause, recap export, and desktop/compact/narrow screenshots. See [design and visual checks](docs/DESIGN.md).
+
+Credentialed Twitch/OBS smoke testing is still required; no public broadcast or real-account authorization was performed as part of these checks.
