@@ -13,3 +13,5 @@ Implemented the React renderer against `packages/shared/index.ts` and the typed 
 Validation: `tsc --noEmit` passes for this branch. `vite build` succeeds (33 modules). Desktop integration and full end-to-end checks are owned by the core integration branch. Browser-only entry explicitly asks the user to launch the desktop bridge.
 
 Manual journey: launch desktop → describe stream → edit/save → connect Twitch and OBS (mock in demo) → stage overlay → readiness check → confirm start → inject chat spike → inspect action result → pause director → confirm end → export recap.
+
+Follow-up flow audit: changing a category name clears its stale Twitch category ID; metadata and start flows already await saving the draft. During real Twitch connect, a prominent authorization panel shows the current attempt's public user code and verification URI while the app awaits approval. Confirmation dialogs support Escape, initial focus, keyboard focus containment, and focus restoration. Development CSP permits Vite's local WebSocket and inline style injection. TypeScript and production renderer build pass after these changes.
