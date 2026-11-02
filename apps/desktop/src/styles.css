@@ -115,7 +115,7 @@ svg { flex-shrink: 0; }
 .composer-heading h2, .studio-checklist h2 { font-size: 20px; letter-spacing: -.6px; font-weight: 550; }
 .composer-heading p { color: #626e5c; font-size: 12px; margin-top: 6px; line-height: 1.6; }
 .brief-box { margin-top: 24px; padding: 17px 18px 15px; border: 1px solid #e1e7dc; border-radius: 15px; background: #fafcf8; text-align: left; }
-.brief-box:focus-within { border-color: #8ba487; }
+.brief-box:focus-within { border-color: #8ba487; outline: 2px solid #326a4d; outline-offset: 3px; }
 .brief-box textarea { display: block; width: 100%; min-height: 93px; max-height: 260px; padding: 0; resize: vertical; border: 0; background: transparent; font-size: 14px; line-height: 1.7; color: #35422e; }
 .brief-box textarea:focus { outline: none; }
 .brief-box textarea::placeholder { color: #626e5c; }
@@ -140,6 +140,8 @@ svg { flex-shrink: 0; }
 .section-heading-title > .section-index { margin-right: 0; }
 .checklist-count { font-size: 11px; color: #626e5c; white-space: nowrap; }
 .studio-resume { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 17px 2px 0; color: #626e5c; font-size: 11px; }
+.studio-resume strong { display: block; color: #43533b; font-size: 12px; margin-top: 6px; font-weight: 500; }
+.studio-resume > div { min-width: 0; }
 .studio-resume .text-button { white-space: nowrap; font-size: 11px; }
 .section-heading .section-index { margin-right: 8px; }
 .subtle { color: #626e5c; font-size: 10px; letter-spacing: 1px; }
