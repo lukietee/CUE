@@ -145,7 +145,7 @@ export class RealTwitchAdapter implements TwitchAdapter {
     if(!migrating)this.current=socket;
     let welcomed=false;
     const handshake=setTimeout(()=>{if(!welcomed)socket.terminate();},15_000);handshake.unref?.();
-    socket.on('message',raw=>{void(async()=>{
+    socket.on('message',(raw:{toString():string})=>{void(async()=>{
       let message: any;
       try{message=JSON.parse(raw.toString());}catch{return;}
       const type=message.metadata?.message_type;
@@ -175,7 +175,7 @@ export class RealTwitchAdapter implements TwitchAdapter {
       const normalized:ChatMessage={id:parsed.data.message_id,user:parsed.data.chatter_user_name,text:parsed.data.message.text.slice(0,4000),ts:String(message.metadata.message_timestamp??new Date().toISOString())};
       for(const fn of this.listeners)fn(normalized);
     })().catch(error=>{this.report(error);socket.close();});});
-    socket.on('error',error=>this.report(new Error(`Twitch chat connection error: ${error.message}`)));
+    socket.on('error',(error:Error)=>this.report(new Error(`Twitch chat connection error: ${error.message}`)));
     socket.on('close',()=>{clearTimeout(handshake);this.sockets.delete(socket);if(socket===this.current){this.current=null;if(this.keepalive)clearTimeout(this.keepalive);this.scheduleReconnect();}else if(migrating&&!welcomed){this.report(new Error('Twitch chat migration failed; retrying the connection.'));if(previous===this.current)previous?.close();}});
   }
   private armKeepalive(socket:WebSocket,seconds:number){if(this.keepalive)clearTimeout(this.keepalive);this.keepalive=setTimeout(()=>{if(socket===this.current)socket.terminate();},(seconds+2)*1000);this.keepalive.unref?.();}
