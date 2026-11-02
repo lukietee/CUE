@@ -58,10 +58,18 @@ See [security boundaries](docs/SECURITY.md), [typed API](docs/API.md), [demo reh
 
 All project commits include `Co-authored-by: lukietee <lucasnotlukie@gmail.com>`.
 
-This workspace's managed sandbox rejected creating `.git`, so its real Git objects and branches live in **`.cue-git`**, with separate agent worktrees under `/tmp`. Use `./scripts/git.sh status` or `./scripts/git.sh log --oneline` here. The helper also supports normal `.git` checkouts. `.cue-git` is local metadata, excluded from tracked files. A normal remote checkout uses standard Git commands.
+The standard `.git` repository now contains the implementation history on `main`; use normal Git commands. `.cue-git` remains an ignored backup of the initial development history.
+
+Enable the versioned commit hook in a new checkout to automatically add the required coauthor trailer:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook is already enabled in this workspace. GitHub CLI authentication is configured locally for `lukietee`.
 
 There is no configured remote. Add your intended remote before pushing or creating PRs. A reviewable PR description is prepared in [docs/PULL_REQUEST.md](docs/PULL_REQUEST.md). GitHub prohibits approving a PR with its author's account.
 
 ## Validation limits
 
-The development sandbox blocks outbound DNS, loopback listeners, and Electron installation. Existing cached packages were used for local compilation and tests; local ignored declaration fallbacks were needed for unavailable Electron and `ws` types. The network overlay integration explicitly skips only on an `EPERM` bind failure. Run `npm install`, `npm test`, and `npm run build` on an unrestricted desktop for validation with the official dependencies. A credentialed Twitch/OBS smoke test and Electron visual rehearsal are still required; neither a public broadcast nor real-account authorization was performed here.
+Initial implementation checks ran in a sandbox that blocked outbound DNS, loopback listeners, and Electron installation. Existing cached packages were used for local compilation and tests; local ignored declaration fallbacks were needed for unavailable Electron and `ws` types. The network overlay integration explicitly skips only on an `EPERM` bind failure. Run `npm install`, `npm test`, and `npm run build` on an unrestricted desktop for validation with the official dependencies. A credentialed Twitch/OBS smoke test and Electron visual rehearsal are still required; neither a public broadcast nor real-account authorization was performed here.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# This workspace's sandbox blocks .git writes; local metadata lives in .cue-git.
+# Prefer the standard repository; retain compatibility with the initial metadata backup.
 set -eu
 CUE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 if [ -e "$CUE_ROOT/.git" ]; then

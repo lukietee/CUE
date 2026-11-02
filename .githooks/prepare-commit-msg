@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+trailer='Co-authored-by: lukietee <lucasnotlukie@gmail.com>'
+if ! grep -Fqx "$trailer" "$1"; then
+  printf '\n\n%s\n' "$trailer" >> "$1"
+fi
