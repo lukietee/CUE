@@ -44,3 +44,26 @@ test('server-directed reconnect preserves subscriptions and closes old socket af
 test('device authorization refuses an arbitrary external URL',async()=>{
  let opened=false;const adapter=new RealTwitchAdapter({clientId:'client',openExternal:async()=>{opened=true;},fetch:async()=>response({device_code:'private',user_code:'PUBLIC',verification_uri:'https://attacker.example/activate',expires_in:100,interval:1})});await assert.rejects(adapter.connect(),/unexpected authorization URL/);assert.equal(opened,false);await adapter.disconnect();
 });
+test('disconnect during credential restore cannot resurrect channel or tokens',async()=>{
+ let resolveLoad!:(value:TwitchTokens)=>void;let requests=0;
+ const adapter=new RealTwitchAdapter({clientId:'client',openExternal:async()=>{},tokenStore:{load:()=>new Promise(resolve=>{resolveLoad=resolve;}),save:async()=>{},clear:async()=>{}},fetch:async()=>{requests++;return response({});}});
+ const connecting=adapter.connect();const rejected=assert.rejects(connecting,/cancelled/);await adapter.disconnect();resolveLoad(tokens);await rejected;await assert.rejects(adapter.getChannel());assert.equal(requests,0);
+});
+test('disconnect during delayed identity request cannot recreate channel',async()=>{
+ let identityRequested!:()=>void;const requested=new Promise<void>(resolve=>{identityRequested=resolve;});let resolveIdentity!:(response:Response)=>void;
+ const adapter=new RealTwitchAdapter({clientId:'client',openExternal:async()=>{},tokenStore:{load:async()=>tokens,save:async()=>{},clear:async()=>{}},fetch:async(input)=>{if(String(input).endsWith('/validate'))return response({client_id:'client',user_id:'42',scopes:TWITCH_SCOPES});identityRequested();return new Promise(resolve=>{resolveIdentity=resolve;});}});
+ const connecting=adapter.connect();const rejected=assert.rejects(connecting,/cancelled/);await requested;await adapter.disconnect();resolveIdentity(response({data:[{id:'42',display_name:'Streamer'}]}));await rejected;await assert.rejects(adapter.getChannel());
+});
+test('late socket welcome after disconnect cannot emit connected or subscribe again',async()=>{
+ const h=harness();await h.adapter.connect();await h.adapter.subscribeChat(()=>{});const socket=h.sockets[0];await h.adapter.disconnect();socket.message({metadata:{message_type:'session_welcome'},payload:{session:{id:'late',keepalive_timeout_seconds:10}}});await settle();assert.equal(h.calls.filter(call=>call.url.endsWith('/eventsub/subscriptions')).length,0);
+});
+test('category lookup returns validated categories and resolves only exact names',async()=>{
+ const requests:string[]=[];
+ const adapter=new RealTwitchAdapter({clientId:'client',openExternal:async()=>{},tokenStore:{load:async()=>tokens,save:async()=>{},clear:async()=>{}},fetch:async(input)=>{const url=String(input);requests.push(url);if(url.endsWith('/validate'))return response({client_id:'client',user_id:'42',scopes:TWITCH_SCOPES});if(url.endsWith('/users'))return response({data:[{id:'42',display_name:'Streamer'}]});return response({data:[{id:'509658',name:'Just Chatting',box_art_url:'ignored'},{id:'123',name:'Chatting Game'}]});}});
+ await adapter.connect();assert.deepEqual(await adapter.resolveCategory('Just Chatting'),{id:'509658',name:'Just Chatting'});assert.equal(await adapter.resolveCategory('Chatting'),null);assert.ok(requests.some(url=>url.includes('query=Just%20Chatting')));await adapter.disconnect();
+});
+test('pending token write is followed by credential clear on disconnect',async()=>{
+ let resolveSave!:()=>void;let saving!:()=>void;const saveStarted=new Promise<void>(resolve=>{saving=resolve;});const operations:string[]=[];
+ const adapter=new RealTwitchAdapter({clientId:'client',openExternal:async()=>{},sleep:async()=>{},tokenStore:{load:async()=>null,save:async()=>{saving();await new Promise<void>(resolve=>{resolveSave=resolve;});operations.push('save');},clear:async()=>{operations.push('clear');}},fetch:async(input)=>String(input).endsWith('/device')?response({device_code:'private',user_code:'PUBLIC',verification_uri:'https://www.twitch.tv/activate',expires_in:100,interval:1}):response(tokens)});
+ const connecting=adapter.connect();const rejected=assert.rejects(connecting,/cancelled/);await saveStarted;const disconnecting=adapter.disconnect();resolveSave();await disconnecting;await rejected;assert.deepEqual(operations,['save','clear']);
+});

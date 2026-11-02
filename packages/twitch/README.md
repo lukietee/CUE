@@ -41,3 +41,9 @@ Official references verified during implementation:
 - [Modify channel information](https://dev.twitch.tv/docs/api/reference/#modify-channel-information)
 
 Run `npm test` from the project root after installing dependencies. `packages/twitch/twitch.test.ts` covers mock lifecycle, metadata identity, EventSub subscription/deduplication, device authorization, and invalid token identity.
+
+## Category lookup and cancellation
+
+Both adapters also expose `searchCategories(query): Promise<{id, name}[]>` and `resolveCategory(name): Promise<{id, name} | null>`. The real adapter searches authenticated Helix `/search/categories`; exact case-insensitive resolution prevents accidentally applying a nearby search result. Core should resolve an edited category name, surface no-match errors, and send the returned ID only after metadata approval. Mock category lookup supports Just Chatting.
+
+Disconnect aborts pending HTTP requests, rejects stale generations, ignores late socket messages, and serializes credential deletion after pending writes. Regression tests cover cancellation during credential load and identity fetch, late welcome delivery, and pending credential writes. The device grant uses Twitch's exact documented `scopes` field on both device request and token polling; public-client refresh omits a secret and stores each rotated token.
