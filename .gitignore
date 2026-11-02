@@ -5,3 +5,4 @@ dist-electron/
 .env
 *.sqlite*
 .DS_Store
+packages/shared/offline-types.d.ts
