@@ -1,0 +1,7 @@
+# Implementation status
+
+Implemented MVP: desktop shell; editable structured planning; local offline Demo Mode; real Twitch device OAuth, metadata/category lookup and EventSub chat; native OBS 5.x connection, scenes, browser-source staging and stream lifecycle; authenticated transparent overlay; three director styles; deterministic topic triggers; permissions/cooldown/pause; evidence-based decisions and server/browser verification distinction; SQLite audit persistence; recovered sessions; recap and Markdown/JSON export; typed validated IPC; OS-encrypted OAuth storage; optional OpenAI structured plan generation.
+
+Deferred P1/P2: real Twitch polls and votes, clip creation, audio transcription, frame sampling, automatic scene switching, persistent cross-session learning, multi-platform integration, signed installers and distribution packaging. OBS preview is status and current overlay text, not video capture. Manual chat commands support the documented bounded set, not an unrestricted natural-language agent. Recap improvement suggestions are template recommendations; engagement lift and causal outcomes are not calculated.
+
+Still requires an unrestricted environment: install official dependency versions, run the loopback integration, launch/rehearse Electron, authorize a real Twitch account, and visibly verify a real OBS browser source. No demo video/submission materials have been recorded. No Git remote is configured, so PR publication/review has not occurred.

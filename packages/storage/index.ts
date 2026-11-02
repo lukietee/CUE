@@ -1,11 +1,60 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { CueSnapshot } from '../shared/index.ts';
 export class Storage {
- private db:DatabaseSync;
- constructor(filename:string){this.db=new DatabaseSync(filename);this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL); CREATE TABLE IF NOT EXISTS stream_plans(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS actions(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS action_results(action_id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS highlights(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT);`)}
- save(snapshot:CueSnapshot){this.db.exec('BEGIN');try{this.db.prepare('INSERT OR REPLACE INTO sessions VALUES (?,?)').run(snapshot.sessionId,JSON.stringify(snapshot));if(snapshot.plan)this.db.prepare('INSERT OR REPLACE INTO stream_plans VALUES (?,?,?)').run(snapshot.plan.id,snapshot.sessionId,JSON.stringify(snapshot.plan));for(const [table,items] of [['events',snapshot.events],['actions',snapshot.actions]] as const){const stmt=this.db.prepare(`INSERT OR REPLACE INTO ${table} VALUES (?,?,?)`);for(const item of items)stmt.run(item.id,snapshot.sessionId,JSON.stringify(item))}for(const r of snapshot.results)this.db.prepare('INSERT OR REPLACE INTO action_results VALUES (?,?,?)').run(r.actionId,snapshot.sessionId,JSON.stringify(r));this.db.prepare('INSERT OR REPLACE INTO settings VALUES (1,?)').run(JSON.stringify(snapshot.settings));this.db.exec('COMMIT')}catch(e){this.db.exec('ROLLBACK');throw e}}
- latest():CueSnapshot|null{const row=this.db.prepare('SELECT snapshot FROM sessions ORDER BY rowid DESC LIMIT 1').get() as {snapshot:string}|undefined;return row?JSON.parse(row.snapshot):null}
- get(id:string):CueSnapshot|null{const row=this.db.prepare('SELECT snapshot FROM sessions WHERE id=?').get(id) as {snapshot:string}|undefined;return row?JSON.parse(row.snapshot):null}
- clear(){this.db.exec('BEGIN; DELETE FROM sessions; DELETE FROM stream_plans; DELETE FROM events; DELETE FROM actions; DELETE FROM action_results; DELETE FROM highlights; DELETE FROM settings; COMMIT;')}
- close(){this.db.close()}
+  private db: DatabaseSync;
+  constructor(filename: string) {
+    this.db = new DatabaseSync(filename);
+    this.db.exec(
+      `PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL); CREATE TABLE IF NOT EXISTS stream_plans(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS actions(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS action_results(action_id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS highlights(id TEXT PRIMARY KEY, session_id TEXT, data TEXT); CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), data TEXT);`,
+    );
+  }
+  save(snapshot: CueSnapshot) {
+    this.db.exec('BEGIN');
+    try {
+      this.db
+        .prepare('INSERT OR REPLACE INTO sessions VALUES (?,?)')
+        .run(snapshot.sessionId, JSON.stringify(snapshot));
+      if (snapshot.plan)
+        this.db
+          .prepare('INSERT OR REPLACE INTO stream_plans VALUES (?,?,?)')
+          .run(snapshot.plan.id, snapshot.sessionId, JSON.stringify(snapshot.plan));
+      for (const [table, items] of [
+        ['events', snapshot.events],
+        ['actions', snapshot.actions],
+      ] as const) {
+        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${table} VALUES (?,?,?)`);
+        for (const item of items) stmt.run(item.id, snapshot.sessionId, JSON.stringify(item));
+      }
+      for (const r of snapshot.results)
+        this.db
+          .prepare('INSERT OR REPLACE INTO action_results VALUES (?,?,?)')
+          .run(r.actionId, snapshot.sessionId, JSON.stringify(r));
+      this.db
+        .prepare('INSERT OR REPLACE INTO settings VALUES (1,?)')
+        .run(JSON.stringify(snapshot.settings));
+      this.db.exec('COMMIT');
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+  latest(): CueSnapshot | null {
+    const row = this.db
+      .prepare('SELECT snapshot FROM sessions ORDER BY rowid DESC LIMIT 1')
+      .get() as { snapshot: string } | undefined;
+    return row ? JSON.parse(row.snapshot) : null;
+  }
+  get(id: string): CueSnapshot | null {
+    const row = this.db.prepare('SELECT snapshot FROM sessions WHERE id=?').get(id) as
+      { snapshot: string } | undefined;
+    return row ? JSON.parse(row.snapshot) : null;
+  }
+  clear() {
+    this.db.exec(
+      'BEGIN; DELETE FROM sessions; DELETE FROM stream_plans; DELETE FROM events; DELETE FROM actions; DELETE FROM action_results; DELETE FROM highlights; DELETE FROM settings; COMMIT;',
+    );
+  }
+  close() {
+    this.db.close();
+  }
 }
