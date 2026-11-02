@@ -23,3 +23,14 @@ npm run test:desktop:dev
 ```
 
 This starts a separate local Vite instance and sends a real full-reload message. A transformed renderer revision proves the new document actually loaded, and the typed brief must survive the reload. Navigation is allowed only to the canonical app entry URL, including its normalized trailing slash; arbitrary paths and origins remain blocked. Both desktop checks compare native window and content heights on macOS to detect a reintroduced title-bar strip.
+
+## OBS password entry and retry
+
+Switching out of Demo Mode clears the demo password and focuses the OBS password field. A failed OBS connection retains the entered password and selects it for replacement. Show/Hide controls make entry verifiable, and a successful connection clears the form password. Connection guidance points to OBS's WebSocket server settings.
+
+```sh
+npm run build
+node --import tsx scripts/smoke-obs-settings.ts
+```
+
+This uses a disposable Electron profile and a local authenticated OBS protocol fixture. It checks keyboard entry after a mode change, a rejected password, retry without clicking the field again, Show/Hide, successful connection, and re-entry after disconnect. It does not connect to the user's OBS or start a broadcast.

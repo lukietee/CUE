@@ -1089,6 +1089,31 @@ label textarea {
   display: block;
   margin-top: 8px;
 }
+.password-field {
+  position: relative;
+  margin-top: 8px;
+}
+.password-field input {
+  padding-right: 76px;
+}
+.password-visibility {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.password-visibility:hover {
+  background: var(--hover);
+}
+.settings-layout .password-field + button {
+  margin-top: 17px;
+}
 input::placeholder,
 textarea::placeholder {
   color: var(--muted);
