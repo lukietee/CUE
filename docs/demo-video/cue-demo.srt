@@ -1,0 +1,75 @@
+1
+00:00:00,250 --> 00:00:03,131
+Meet Cue, your AI livestream producer.
+
+2
+00:00:03,131 --> 00:00:11,396
+Plan your show, connect your studio, and bring your audience into the action, all from one desktop workspace.
+
+3
+00:00:12,468 --> 00:00:14,292
+Start with a simple brief.
+
+4
+00:00:14,292 --> 00:00:18,711
+We're planning a city walk where chat picks the next challenge.
+
+5
+00:00:18,711 --> 00:00:22,499
+Choose a director style, then create your stream plan.
+
+6
+00:00:23,507 --> 00:00:26,911
+Cue turns the brief into an editable running order.
+
+7
+00:00:26,911 --> 00:00:32,052
+Refine your title, category, tags, and timed segments before the show begins.
+
+8
+00:00:33,544 --> 00:00:37,988
+Connect Twitch and OBS, then stage the Cue overlay in your scene.
+
+9
+00:00:37,988 --> 00:00:44,550
+This walkthrough uses Demo Mode to demonstrate the workflow without starting a public broadcast.
+
+10
+00:00:45,588 --> 00:00:50,682
+Run the readiness check, review the confirmation, and start the session.
+
+11
+00:00:50,682 --> 00:00:56,130
+Cue keeps broadcast controls explicit, so you decide when the show goes live.
+
+12
+00:00:57,252 --> 00:00:59,254
+Now chat asks for a challenge.
+
+13
+00:00:59,254 --> 00:01:03,658
+Cue spots the repeated topic and turns it into an audience prompt.
+
+14
+00:01:03,658 --> 00:01:08,862
+The director feed shows the supporting messages, the decision, and the result.
+
+15
+00:01:12,311 --> 00:01:13,643
+You stay in control.
+
+16
+00:01:13,643 --> 00:01:21,506
+Pause the director at any time to stop automatic cues, then resume when you're ready to bring chat back into the show.
+
+17
+00:01:22,596 --> 00:01:29,799
+When you're done, end the session and export a recap of your production actions and highlight suggestions.
+
+18
+00:01:29,799 --> 00:01:30,071
+Cue.
+
+19
+00:01:30,071 --> 00:01:31,838
+Your stream, right on cue.
