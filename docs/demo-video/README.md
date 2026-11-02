@@ -4,7 +4,7 @@
 
 ![Live chat cue in the recorded CUE interface](preview.png)
 
-The walkthrough records the real Electron app: studio, brief entry, editable plan, Twitch/OBS demo connections, overlay staging, readiness, broadcast confirmation, chat-triggered cue, pause/resume, and recap export. An isolated Demo Mode profile exercises the application without accessing the user's session or starting a public broadcast. Demo Mode remains visible in the video.
+The walkthrough records the real Electron app in its Twitch-inspired dark theme: studio, brief entry, editable plan, Twitch/OBS demo connections, overlay staging, readiness, broadcast confirmation, chat-triggered cue, pause/resume, and recap export. An isolated Demo Mode profile exercises the application without accessing the user's session or starting a public broadcast. Demo Mode remains visible in the video.
 
 Presentation adds a purple frame, chapter captions, an animated pointer, and short fades. The app itself supplies all UI and production state. The local overlay is loaded in a hidden browser window so it receives and acknowledges real overlay messages. Audio is synthesized through ElevenLabs with the Liam premade voice by default.
 
