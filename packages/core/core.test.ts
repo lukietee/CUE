@@ -75,3 +75,41 @@ test('restoration retains audit history and requires reconnection before product
  const restored=new CueService({store,obs,twitch,overlay});const state=restored.snapshot();assert.equal(state.status,'live');assert.equal(state.paused,true);assert.equal(state.obs.connected,false);assert.equal(state.twitch.connected,false);assert.equal(state.overlay.staged,false);assert.equal(state.actions.length,1);assert.match(state.error!,/interrupted/);
  const copy=restored.snapshot();copy.actions.length=0;assert.equal(restored.snapshot().actions.length,1);
 });
+
+test('editing or replacing the plan invalidates previously issued start confirmation',async t=>{
+ const {service:s,store}=setup();t.after(()=>store.close());await ready(s);
+ const beforeEdit=s.requestConfirmation('start');await s.savePlan({...s.snapshot().plan!,title:'Updated title after confirmation'});
+ await assert.rejects(s.startStream(beforeEdit),/confirmation/);assert.notEqual(s.snapshot().status,'live');
+ const beforeReplacement=s.requestConfirmation('start');await s.createPlan('A completely different stream','documentary');
+ await assert.rejects(s.startStream(beforeReplacement),/confirmation/);assert.notEqual(s.snapshot().status,'live');
+});
+
+test('start tolerates a delayed OBS output transition and keeps automation paused until active',async t=>{
+ const {service:s,store,obs}=setup();t.after(()=>store.close());await ready(s);
+ const originalStart=obs.startStream.bind(obs);const originalStatus=obs.getStreamStatus.bind(obs);
+ let requested=false;let polls=0;
+ t.mock.method(obs,'startStream',async()=>{requested=true;await originalStart();});
+ t.mock.method(obs,'getStreamStatus',async()=>{if(requested&&++polls===1){assert.equal(s.snapshot().paused,true);assert.equal(s.snapshot().status,'live');return {active:false};}return originalStatus();});
+ await s.startStream(s.requestConfirmation('start'));
+ assert.ok(polls>=2);assert.equal(s.snapshot().status,'live');assert.equal(s.snapshot().obs.streaming,true);assert.equal(s.snapshot().paused,false);assert.ok(s.snapshot().events.some(e=>e.kind==='stream.started'));
+});
+
+test('restored live production cannot resume before reconnection, staging, and active output',async t=>{
+ const {service:s,store,obs,twitch,overlay}=setup();t.after(()=>store.close());await live(s);
+ const restored=new CueService({store,obs,twitch,overlay});
+ await assert.rejects(restored.pauseDirector(false),/Reconnect OBS/);await restored.injectDemo();assert.equal(restored.snapshot().actions.length,0);
+ await restored.connectObs();await assert.rejects(restored.pauseDirector(false),/stage/);
+ await restored.stageOverlay();await obs.stopStream();await restored.checkReadiness();await assert.rejects(restored.pauseDirector(false),/confirm streaming/);
+ await restored.injectDemo();assert.equal(restored.snapshot().actions.length,0);
+ await obs.startStream();await restored.checkReadiness();await restored.pauseDirector(false);await restored.ingestChat('after-recovery','viewer','challenge please');
+ assert.equal(restored.snapshot().paused,false);assert.equal(restored.snapshot().actions.length,1);assert.equal(restored.snapshot().actions[0].status,'succeeded');
+});
+
+test('restored disconnected live sessions can replace OBS for reconnect without allowing Twitch replacement',async t=>{
+ const {service:s,store,obs,twitch,overlay}=setup();t.after(()=>store.close());await live(s);
+ const restored=new CueService({store,obs,twitch,overlay});const replacement=new MockObsAdapter();
+ await restored.replaceAdapters({obs:replacement});await restored.connectObs();assert.equal(restored.snapshot().obs.connected,true);assert.equal(restored.snapshot().obs.streaming,false);
+ await assert.rejects(restored.replaceAdapters({obs:new MockObsAdapter()}),/End the session/);
+ await assert.rejects(restored.replaceAdapters({twitch:new MockTwitchAdapter()}),/End the session/);
+ await restored.stageOverlay();assert.equal(replacement.overlayUrl,overlay.url);await replacement.startStream();await restored.checkReadiness();await restored.pauseDirector(false);assert.equal(restored.snapshot().paused,false);
+});
