@@ -1,8 +1,8 @@
 # Studio interface
 
-CUE uses a light production workspace inspired by the provided dashboard reference: edge-to-edge content, quiet navigation, forest green controls, and flat white cards. The native macOS window supplies the rounded outer corners; there is no second inset web-page frame or separate dark title-bar strip. Real traffic-light controls sit above the sidebar, the header is draggable, and controls remain clickable. The sidebar stays in place while content scrolls. The main composition is an overview row above a stream brief, directing styles, and studio checklist. Every number comes from the active session; no engagement graphs or outcome metrics are invented.
+CUE uses a Twitch-inspired dark production workspace: a near-black canvas, charcoal navigation and cards, bright purple controls, and pale violet links and active states. Shared CSS tokens define surfaces, text, borders, hover states, and error treatments. The separate accent text color keeps small links readable against dark panels, while white text remains on filled purple buttons. Native controls and the launch background also use the dark theme. The native macOS window supplies the rounded outer corners; there is no second inset web-page frame or separate dark title-bar strip. Real traffic-light controls sit above the sidebar, the header is draggable, and controls remain clickable. The sidebar stays in place while content scrolls. The main composition is an overview row above a stream brief, directing styles, and studio checklist. Every number comes from the active session; no engagement graphs or outcome metrics are invented.
 
-Typography and spacing provide the hierarchy. Numbered sections and directing styles replace decorative sparkle imagery and repeated icon badges. Icons remain on navigation and controls where they clarify an action. The featured session card anchors the otherwise light workspace. Sidebar navigation is kept minimal, with settings at the bottom.
+Typography and spacing provide the hierarchy. Numbered sections and directing styles replace decorative sparkle imagery and repeated icon badges. Icons remain on navigation and controls where they clarify an action. The featured purple session card anchors the dark workspace. Compact button corners and subtle panel borders keep controls distinct from the background. Sidebar navigation is kept minimal, with settings at the bottom.
 
 The same colors, controls, field treatments and spacing apply to the plan editor, live desk, recap, settings, confirmations, errors, and Twitch authorization. Permission controls and explicit stream start/stop confirmations remain functional. Connection labels distinguish OBS connectivity from actual broadcasting, and the director has a standby state outside active production.
 
@@ -23,3 +23,14 @@ npm run test:desktop:dev
 ```
 
 This starts a separate local Vite instance and sends a real full-reload message. A transformed renderer revision proves the new document actually loaded, and the typed brief must survive the reload. Navigation is allowed only to the canonical app entry URL, including its normalized trailing slash; arbitrary paths and origins remain blocked. Both desktop checks compare native window and content heights on macOS to detect a reintroduced title-bar strip.
+
+## OBS password entry and retry
+
+Switching out of Demo Mode clears the demo password and focuses the OBS password field. A failed OBS connection retains the entered password and selects it for replacement. Show/Hide controls make entry verifiable, and a successful connection clears the form password. Connection guidance points to OBS's WebSocket server settings.
+
+```sh
+npm run build
+node --import tsx scripts/smoke-obs-settings.ts
+```
+
+This uses a disposable Electron profile and a local authenticated OBS protocol fixture. It checks keyboard entry after a mode change, a rejected password, retry without clicking the field again, Show/Hide, successful connection, and re-entry after disconnect. It does not connect to the user's OBS or start a broadcast.

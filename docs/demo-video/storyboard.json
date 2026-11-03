@@ -1,0 +1,58 @@
+[
+  {
+    "id": "studio",
+    "title": "Your production partner",
+    "caption": "One workspace for your stream, your audience, and your next cue.",
+    "seconds": 9,
+    "narration": "Meet Cue, your AI livestream producer. Plan your show, connect your studio, and bring your audience into the action, all from one desktop workspace."
+  },
+  {
+    "id": "brief",
+    "title": "Start with an idea",
+    "caption": "Describe your stream. Choose a director style. Create your plan.",
+    "seconds": 10,
+    "narration": "Start with a simple brief. We're planning a city walk where chat picks the next challenge. Choose a director style, then create your stream plan."
+  },
+  {
+    "id": "plan",
+    "title": "Make the show your own",
+    "caption": "Edit the title, category, tags, and timed running order.",
+    "seconds": 10,
+    "narration": "Cue turns the brief into an editable running order. Refine your title, category, tags, and timed segments before the show begins."
+  },
+  {
+    "id": "connect",
+    "title": "Connect your studio",
+    "caption": "Twitch + OBS + a staged overlay. This walkthrough uses Demo Mode.",
+    "seconds": 12,
+    "narration": "Connect Twitch and OBS, then stage the Cue overlay in your scene. This walkthrough uses Demo Mode to demonstrate the workflow without starting a public broadcast."
+  },
+  {
+    "id": "live",
+    "title": "Go live with intention",
+    "caption": "Check readiness. Review the confirmation. Start the session.",
+    "seconds": 10,
+    "narration": "Run the readiness check, review the confirmation, and start the session. Cue keeps broadcast controls explicit, so you decide when the show goes live."
+  },
+  {
+    "id": "chat",
+    "title": "Let chat shape the show",
+    "caption": "Repeated chat topics become contextual overlay cues, with evidence.",
+    "seconds": 15,
+    "narration": "Now chat asks for a challenge. Cue spots the repeated topic and turns it into an audience prompt. The director feed shows the supporting messages, the decision, and the result."
+  },
+  {
+    "id": "control",
+    "title": "Stay in the director's chair",
+    "caption": "Pause automation whenever you need to. Resume on your terms.",
+    "seconds": 10,
+    "narration": "You stay in control. Pause the director at any time to stop automatic cues, then resume when you're ready to bring chat back into the show."
+  },
+  {
+    "id": "recap",
+    "title": "Wrap up. Take the recap with you.",
+    "caption": "Export your session recap as Markdown or JSON.",
+    "seconds": 12,
+    "narration": "When you're done, end the session and export a recap of your production actions and highlight suggestions. Cue. Your stream, right on cue."
+  }
+]
