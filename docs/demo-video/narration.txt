@@ -1,0 +1,15 @@
+Meet Cue, your AI livestream producer. Plan your show, connect your studio, and bring your audience into the action, all from one desktop workspace.
+
+Start with a simple brief. We're planning a city walk where chat picks the next challenge. Choose a director style, then create your stream plan.
+
+Cue turns the brief into an editable running order. Refine your title, category, tags, and timed segments before the show begins.
+
+Connect Twitch and OBS, then stage the Cue overlay in your scene. This walkthrough uses Demo Mode to demonstrate the workflow without starting a public broadcast.
+
+Run the readiness check, review the confirmation, and start the session. Cue keeps broadcast controls explicit, so you decide when the show goes live.
+
+Now chat asks for a challenge. Cue spots the repeated topic and turns it into an audience prompt. The director feed shows the supporting messages, the decision, and the result.
+
+You stay in control. Pause the director at any time to stop automatic cues, then resume when you're ready to bring chat back into the show.
+
+When you're done, end the session and export a recap of your production actions and highlight suggestions. Cue. Your stream, right on cue.
