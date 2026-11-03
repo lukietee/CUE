@@ -292,3 +292,108 @@ test('OBS health refresh observes external stops and pauses automatic production
   await service.injectDemo();
   assert.equal(service.snapshot().actions.length, 0);
 });
+
+test('successful connections clear their stale errors without hiding unrelated failures', async (t) => {
+  const { service, store } = setup();
+  t.after(() => store.close());
+  service.reportError('OBS disconnected');
+  await service.connectObs();
+  assert.equal(service.snapshot().error, null);
+  service.reportError('Twitch EventSub subscription failed');
+  await service.connectTwitch();
+  assert.equal(service.snapshot().error, null);
+  service.reportError('Overlay state verification failed');
+  await service.connectObs();
+  assert.equal(service.snapshot().error, 'Overlay state verification failed');
+});
+
+test('Twitch is connected only after its chat subscription has succeeded', async (t) => {
+  const { service, store, twitch } = setup();
+  t.after(() => store.close());
+  await service.connectTwitch();
+  assert.equal(service.snapshot().twitch.connected, true);
+  t.mock.method(twitch, 'subscribeChat', async () => { throw Error('EventSub subscription rejected'); });
+  await assert.rejects(service.connectTwitch(), /subscription rejected/);
+  assert.equal(service.snapshot().twitch.connected, false);
+});
+
+test('a failed Twitch reconnect clears the previous connected state', async (t) => {
+  const { service, store, twitch } = setup();
+  t.after(() => store.close());
+  await service.connectTwitch();
+  t.mock.method(twitch, 'connect', async () => { throw Error('Twitch temporarily unavailable'); });
+  await assert.rejects(service.connectTwitch(), /temporarily unavailable/);
+  assert.equal(service.snapshot().twitch.connected, false);
+});
+
+test('changing the OBS program scene pauses cues until the overlay is staged again', async (t) => {
+  const { service, store, obs } = setup();
+  t.after(() => store.close());
+  await live(service);
+  await obs.switchScene('Be right back');
+  await service.refreshProductionState();
+  assert.equal(service.snapshot().obs.scene, 'Be right back');
+  assert.equal(service.snapshot().overlay.staged, false);
+  assert.equal(service.snapshot().paused, true);
+  await service.injectDemo();
+  assert.equal(service.snapshot().actions.length, 0);
+  await assert.rejects(service.pauseDirector(false), /stage the overlay/);
+  await service.stageOverlay();
+  await service.pauseDirector(false);
+  await service.ingestChat('new-scene-message', 'viewer', 'challenge please');
+  assert.equal(service.snapshot().actions.length, 1);
+});
+
+test('readiness checks the current OBS scene and drops a stale ready status', async (t) => {
+  const { service, store, obs } = setup();
+  t.after(() => store.close());
+  await ready(service);
+  assert.equal(service.snapshot().status, 'ready');
+  await obs.switchScene('Just chatting');
+  const readiness = await service.checkReadiness();
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.checks.find(check => check.name === 'Overlay')!.ok, false);
+  assert.equal(service.snapshot().status, 'draft');
+  await service.stageOverlay();
+  assert.equal((await service.checkReadiness()).ready, true);
+});
+
+test('OBS connection loss invalidates staging and reconnect requires a new staging pass', async (t) => {
+  const { service, store, obs } = setup();
+  t.after(() => store.close());
+  await ready(service);
+  const failure = t.mock.method(obs, 'getStreamStatus', async () => { throw Error('OBS disconnected'); });
+  await service.refreshProductionState();
+  assert.equal(service.snapshot().obs.connected, false);
+  assert.equal(service.snapshot().overlay.staged, false);
+  failure.mock.restore();
+  await service.connectObs();
+  assert.equal(service.snapshot().error, null);
+  assert.equal((await service.checkReadiness()).ready, false);
+  await service.stageOverlay();
+  assert.equal((await service.checkReadiness()).ready, true);
+});
+
+
+test('staging immediately after a scene change keeps the new scene staged', async (t) => {
+  const { service, store, obs } = setup();
+  t.after(() => store.close());
+  await ready(service);
+  await obs.switchScene('Just chatting');
+  await service.stageOverlay();
+  assert.equal(service.snapshot().obs.scene, 'Just chatting');
+  await service.refreshProductionState();
+  assert.equal(service.snapshot().overlay.staged, true);
+  assert.equal((await service.checkReadiness()).ready, true);
+});
+
+
+test('a failed restaging attempt cannot retain stale overlay readiness', async (t) => {
+  const { service, store, obs } = setup();
+  t.after(() => store.close());
+  await ready(service);
+  t.mock.method(obs, 'ensureOverlaySource', async () => { throw Error('OBS source unavailable'); });
+  await assert.rejects(service.stageOverlay(), /source unavailable/);
+  assert.equal(service.snapshot().overlay.staged, false);
+  assert.equal((await service.checkReadiness()).ready, false);
+});

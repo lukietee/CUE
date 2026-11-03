@@ -77,7 +77,13 @@ export class OverlayServer {
     });
     const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
     server.on('upgrade', (req, socket, head) => {
-      const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+      let path: string;
+      try {
+        path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+      } catch {
+        socket.destroy();
+        return;
+      }
       const origin = req.headers.origin;
       if (
         !this.authorized(req.url, req.headers.host) ||

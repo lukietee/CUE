@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, nativeTheme } 
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { loadConfiguration } from '../../../packages/desktop/configuration.ts';
 import { z } from 'zod';
 import { ModelPlanner } from '../../../packages/agent/provider.ts';
 import {
@@ -24,18 +26,23 @@ import {
   type TwitchAdapter,
   type ObsAdapter,
 } from '../../../packages/shared/index.ts';
-try {
-  process.loadEnvFile();
-} catch {
-  /* .env is optional */
-}
 // Keep existing sessions and encrypted credentials in the same directory when
 // giving the development app its product name (the default is often Electron).
-const existingUserData = app.getPath('userData');
+const legacyUserData = path.join(app.getPath('appData'), 'Electron');
+const configuredUserData = app.getPath('userData');
+const defaultUserData = path.join(app.getPath('appData'), app.getName());
+const existingUserData =
+  app.isPackaged &&
+  configuredUserData === defaultUserData &&
+  existsSync(path.join(legacyUserData, 'cue.sqlite'))
+    ? legacyUserData
+    : configuredUserData;
 app.setName('CUE');
 app.setPath('userData', existingUserData);
 nativeTheme.themeSource = 'dark';
 const dirname = path.dirname(fileURLToPath(import.meta.url));
+loadConfiguration({ packaged: app.isPackaged, projectRoot: path.resolve(dirname, '..'),
+  userData: app.getPath('userData'), env: process.env });
 const rendererEntry = normalizeRendererEntryUrl(
   process.env.CUE_DEV_URL ?? new URL('../dist/index.html', import.meta.url).href,
 );
@@ -46,6 +53,10 @@ let store: Storage;
 let twitch: TwitchAdapter;
 let obs: ObsAdapter;
 let realObsConfig = { host: '127.0.0.1', port: 4455, password: '' };
+let obsCredentialsSaved = false;
+let rememberConnections = false;
+let encryptionAvailable: boolean | undefined;
+let expectedObsDisconnect = false;
 let modeChanging = false;
 let healthTimer: ReturnType<typeof setInterval> | undefined;
 const ObsConfig = z
@@ -60,19 +71,65 @@ const ObsConfig = z
     password: z.string().max(1000),
   })
   .strict();
+const obsCredentialsFile = () => path.join(app.getPath('userData'), 'obs-credentials.enc');
+const connectionPreferenceFile = () => path.join(app.getPath('userData'), 'connection-preferences.json');
+async function loadConnectionPreference() {
+  if (process.env.CUE_REMEMBER_CONNECTIONS !== undefined) {
+    rememberConnections = process.env.CUE_REMEMBER_CONNECTIONS === 'true';
+    return;
+  }
+  try {
+    rememberConnections = JSON.parse(await readFile(connectionPreferenceFile(), 'utf8')).rememberConnections === true;
+  } catch { rememberConnections = false; }
+}
+async function saveConnectionPreference() {
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await writeFile(connectionPreferenceFile(), JSON.stringify({ rememberConnections }), { mode: 0o600 });
+}
+function secureStorageAvailable() {
+  if (!rememberConnections) return false;
+  try { return encryptionAvailable ??= safeStorage.isEncryptionAvailable(); }
+  catch { return encryptionAvailable = false; }
+}
+async function loadObsCredentials() {
+  if (!secureStorageAvailable()) return;
+  try {
+    realObsConfig = ObsConfig.parse(JSON.parse(safeStorage.decryptString(await readFile(obsCredentialsFile()))));
+    obsCredentialsSaved = true;
+  } catch { /* A missing or obsolete saved connection requires manual entry. */ }
+}
+async function saveObsCredentials() {
+  if (!secureStorageAvailable()) return;
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await writeFile(obsCredentialsFile(), safeStorage.encryptString(JSON.stringify(realObsConfig)), { mode: 0o600 });
+  obsCredentialsSaved = true;
+}
+function obsConnectionChanged(connected: boolean) {
+  if (!service || connected) return;
+  const wasConnected = service.state.obs.connected;
+  service.state.obs.connected = false;
+  service.state.obs.streaming = false;
+  service.state.overlay.staged = false;
+  if (service.state.status === 'live') service.state.paused = true;
+  if (!expectedObsDisconnect && wasConnected) service.reportError('OBS disconnected. Reconnect in Settings.');
+}
+async function disconnectObsAdapter() {
+  expectedObsDisconnect = true;
+  try { await obs.disconnect(); } finally { expectedObsDisconnect = false; }
+}
 function tokenStore(): TokenStore {
   const filename = path.join(app.getPath('userData'), 'twitch-credentials.enc');
   return {
     async load() {
       try {
-        if (!safeStorage.isEncryptionAvailable()) return null;
+        if (!secureStorageAvailable()) return null;
         return JSON.parse(safeStorage.decryptString(await readFile(filename))) as TwitchTokens;
       } catch {
         return null;
       }
     },
     async save(tokens) {
-      if (!safeStorage.isEncryptionAvailable()) return;
+      if (!secureStorageAvailable()) return;
       await mkdir(path.dirname(filename), { recursive: true });
       await writeFile(filename, safeStorage.encryptString(JSON.stringify(tokens)), { mode: 0o600 });
     },
@@ -111,12 +168,7 @@ function adapters(demo: boolean) {
     ? new MockObsAdapter()
     : new RealObsAdapter({
         ...realObsConfig,
-        onConnectionChange: (connected: boolean) => {
-          if (service && !connected) {
-            service.state.obs.connected = false;
-            service.reportError('OBS disconnected. Reconnect in Settings.');
-          }
-        },
+        onConnectionChange: obsConnectionChanged,
       });
   return { twitch, obs };
 }
@@ -136,6 +188,14 @@ function bind(channel: string, schema: z.ZodType<any[]>, handler: (...args: any[
 }
 async function boot() {
   await app.whenReady();
+  await loadConnectionPreference();
+  await loadObsCredentials();
+  // An operator may supply a connection for this process without storing it.
+  if (process.env.CUE_OBS_PASSWORD !== undefined) {
+    realObsConfig = ObsConfig.parse({ host: '127.0.0.1', port: Number(process.env.CUE_OBS_PORT || 4455), password: process.env.CUE_OBS_PASSWORD });
+  }
+  const appIcon = path.join(dirname, '../assets/cue.png');
+  if (process.platform === 'darwin') app.dock?.setIcon(appIcon);
   overlay = new OverlayServer({ port: Number(process.env.CUE_OVERLAY_PORT ?? 4318) });
   await overlay.start();
   store = new Storage(path.join(app.getPath('userData'), 'cue.sqlite'));
@@ -157,6 +217,7 @@ async function boot() {
     minHeight: 720,
     show: false,
     backgroundColor: '#0e0e10',
+    icon: appIcon,
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset' as const,
@@ -186,30 +247,52 @@ async function boot() {
     if (!win.isDestroyed()) win.webContents.send('cue:event', event);
   });
   const none = z.tuple([]);
-  bind('getSnapshot', none, () => service.snapshot());
+  let rendererInitialized!: () => void;
+  const rendererReady = new Promise<void>(resolve => { rendererInitialized = resolve; });
+  bind('getSnapshot', none, () => { rendererInitialized(); return service.snapshot(); });
+  const setupStatus = () => ({
+    twitchConfigured: Boolean(process.env.TWITCH_CLIENT_ID?.trim()),
+    plannerConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+    plannerModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    obsCredentialsSaved,
+    rememberConnections,
+    obsHost: realObsConfig.host,
+    obsPort: realObsConfig.port,
+  });
+  bind('getSetupStatus', none, setupStatus);
+  bind('setRememberConnections', z.tuple([z.boolean()]), async (enabled) => {
+    if (service.state.status === 'live') throw Error('End the session before changing saved connections.');
+    rememberConnections = enabled;
+    encryptionAvailable = undefined;
+    if (enabled && !secureStorageAvailable()) {
+      rememberConnections = false;
+      await saveConnectionPreference();
+      throw Error('Secure storage was not allowed. You can keep using session-only connections.');
+    }
+    if (!enabled) obsCredentialsSaved = false;
+    else if (service.state.obs.connected && !service.state.settings.demo) await saveObsCredentials();
+    await saveConnectionPreference();
+    return setupStatus();
+  });
   bind('createPlan', z.tuple([z.string().min(3).max(4000), ModeSchema]), (brief, mode) =>
     service.createPlan(brief, mode),
   );
   bind('savePlan', z.tuple([PlanSchema]), (plan) => service.savePlan(plan));
-  bind('connectTwitch', none, () => service.connectTwitch());
+  let connectingTwitch: ReturnType<CueService['connectTwitch']> | undefined;
+  const connectTwitch = () => connectingTwitch ??= service.connectTwitch().finally(() => { connectingTwitch = undefined; });
+  bind('connectTwitch', none, connectTwitch);
   bind('connectObs', z.tuple([ObsConfig]), async (config) => {
-    if (!service.state.settings.demo) {
-      if (service.state.status === 'live' && service.state.obs.connected)
-        throw Error('End the session before reconfiguring connected OBS');
-      await obs.disconnect();
-      realObsConfig = config;
-      obs = new RealObsAdapter({
-        ...config,
-        onConnectionChange: (connected) => {
-          if (!connected) {
-            service.state.obs.connected = false;
-            service.reportError('OBS disconnected');
-          }
-        },
-      });
-      await service.replaceAdapters({ obs });
-    }
+    if (service.state.settings.demo) return service.connectObs();
+    if (service.state.status === 'live' && service.state.obs.connected)
+      throw Error('End the session before reconfiguring connected OBS');
+    const sameEndpoint = config.host === realObsConfig.host && config.port === realObsConfig.port;
+    const nextConfig = { ...config, password: config.password || ((obsCredentialsSaved || service.state.obs.connected) && sameEndpoint ? realObsConfig.password : '') };
+    await disconnectObsAdapter();
+    obs = new RealObsAdapter({ ...nextConfig, onConnectionChange: obsConnectionChanged });
+    await service.replaceAdapters({ obs });
     await service.connectObs();
+    realObsConfig = nextConfig;
+    await saveObsCredentials();
   });
   bind('checkReadiness', none, () => service.checkReadiness());
   bind('applyMetadata', z.tuple([z.string()]), (id) => service.applyMetadata(id));
@@ -256,7 +339,8 @@ async function boot() {
       modeChanging = true;
       try {
         await service.disconnect('twitch');
-        await service.disconnect('obs');
+        expectedObsDisconnect = true;
+        try { await service.disconnect('obs'); } finally { expectedObsDisconnect = false; }
         await service.replaceAdapters(adapters(patch.demo));
         service.state.settings.demo = patch.demo;
         service.state.overlay.staged = false;
@@ -270,9 +354,31 @@ async function boot() {
   bind('sendMessage', z.tuple([z.string().min(1).max(2000)]), (text) => service.sendMessage(text));
   bind('injectDemo', none, () => service.injectDemo());
   bind('deleteHistory', none, () => service.deleteHistory());
-  bind('disconnect', z.tuple([z.enum(['twitch', 'obs'])]), (s) => service.disconnect(s));
+  bind('disconnect', z.tuple([z.enum(['twitch', 'obs'])]), async (target) => {
+    if (target === 'obs') expectedObsDisconnect = true;
+    try {
+      await service.disconnect(target);
+      if (target === 'obs' && !service.state.settings.demo) {
+        await unlink(obsCredentialsFile()).catch(() => {});
+        obsCredentialsSaved = false;
+        realObsConfig = { host: '127.0.0.1', port: 4455, password: '' };
+      }
+    } finally { expectedObsDisconnect = false; }
+  });
   if (process.env.CUE_DEV_URL) await win.loadURL(rendererEntry);
   else await win.loadFile(path.join(dirname, '../dist/index.html'));
+  await rendererReady;
+  // A cached authorization can reconnect silently; new accounts use Connect Twitch.
+  if (!demo && process.env.TWITCH_CLIENT_ID && (process.argv.includes('--connect-twitch') || await tokenStore().load())) {
+    void connectTwitch().catch(error => service.reportError(error));
+  }
+  // Restore connections and refresh the per-launch overlay URL without starting output.
+  if (!demo && (obsCredentialsSaved || process.env.CUE_OBS_PASSWORD !== undefined)) {
+    try {
+      await service.connectObs();
+      if (service.state.plan) await service.stageOverlay();
+    } catch (error) { service.reportError(error); }
+  }
   let checking = false;
   healthTimer = setInterval(() => {
     if (checking || modeChanging) return;
@@ -306,7 +412,12 @@ app.on('will-quit', () => {
   store?.close();
   void overlay?.close();
 });
-boot().catch((error) => {
+const primaryInstance = app.requestSingleInstanceLock();
+app.on('second-instance', () => {
+  if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+});
+if (!primaryInstance) app.quit();
+else boot().catch((error) => {
   console.error(error);
   dialog.showErrorBox(
     'CUE could not start',

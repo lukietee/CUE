@@ -97,13 +97,15 @@ test('EventSub subscribes on welcome, normalizes chat and deduplicates delivery'
   const h = harness();
   await h.adapter.connect();
   const received: unknown[] = [];
-  const off = await h.adapter.subscribeChat((message) => received.push(message));
+  const subscribing = h.adapter.subscribeChat((message) => received.push(message));
+  await settle();
   const socket = h.sockets[0];
   socket.message({
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'socket-id', keepalive_timeout_seconds: 10 } },
   });
   await settle();
+  const off = await subscribing;
   const subscription = h.calls.find((call) => call.url.endsWith('/eventsub/subscriptions'));
   assert.ok(subscription);
   assert.deepEqual(JSON.parse(String(subscription.init.body)).condition, {
@@ -172,7 +174,7 @@ test('OAuth device flow opens only a trusted Twitch URL and persists rotating to
       return response({ data: [{ id: '42', display_name: 'Streamer' }] });
     },
   });
-  await adapter.connect();
+  await Promise.all([adapter.connect(), adapter.connect()]);
   assert.ok(opened.startsWith('https://www.twitch.tv/activate'));
   assert.equal(tokenRequests, 2);
   assert.deepEqual(stored, tokens);
@@ -227,13 +229,15 @@ test('401 refresh rotates tokens before retrying a metadata update', async () =>
 test('server-directed reconnect preserves subscriptions and closes old socket after welcome', async () => {
   const h = harness();
   await h.adapter.connect();
-  await h.adapter.subscribeChat(() => {});
+  const subscribing = h.adapter.subscribeChat(() => {});
+  await settle();
   const first = h.sockets[0];
   first.message({
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'first', keepalive_timeout_seconds: 10 } },
   });
   await settle();
+  await subscribing;
   let closed = false;
   first.on('close', () => {
     closed = true;
@@ -331,9 +335,12 @@ test('disconnect during delayed identity request cannot recreate channel', async
 test('late socket welcome after disconnect cannot emit connected or subscribe again', async () => {
   const h = harness();
   await h.adapter.connect();
-  await h.adapter.subscribeChat(() => {});
+  const subscribing = h.adapter.subscribeChat(() => {});
+  const rejected = assert.rejects(subscribing, /cancelled|disconnected/);
+  await settle();
   const socket = h.sockets[0];
   await h.adapter.disconnect();
+  await rejected;
   socket.message({
     metadata: { message_type: 'session_welcome' },
     payload: { session: { id: 'late', keepalive_timeout_seconds: 10 } },
@@ -414,4 +421,156 @@ test('pending token write is followed by credential clear on disconnect', async 
   await disconnecting;
   await rejected;
   assert.deepEqual(operations, ['save', 'clear']);
+});
+
+test('chat subscription waits for EventSub registration and retries a rejected registration', async () => {
+  const sockets: FakeSocket[] = [];
+  let resolveSubscription!: (value: Response) => void;
+  let registrations = 0;
+  const adapter = new RealTwitchAdapter({
+    clientId: 'client', openExternal: async () => {},
+    tokenStore: { load: async () => tokens, save: async () => {}, clear: async () => {} },
+    fetch: async input => {
+      const url = String(input);
+      if (url.endsWith('/validate')) return response({ client_id: 'client', user_id: '42', scopes: TWITCH_SCOPES });
+      if (url.endsWith('/users')) return response({ data: [{ id: '42', display_name: 'Streamer' }] });
+      registrations++;
+      return new Promise(resolve => { resolveSubscription = resolve; });
+    },
+    socketFactory: () => {
+      const socket = new FakeSocket(); sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+  });
+  await adapter.connect();
+  let ready = false;
+  const subscribing = adapter.subscribeChat(() => {}).then(off => { ready = true; return off; });
+  const rejected = assert.rejects(subscribing, /403/);
+  await settle();
+  sockets[0].message({ metadata: { message_type: 'session_welcome' }, payload: { session: { id: 'first' } } });
+  await settle();
+  assert.equal(ready, false, 'A welcome without a registered chat subscription is not ready.');
+  resolveSubscription(response({}, 403));
+  await rejected;
+  assert.equal(ready, false);
+  const retry = adapter.subscribeChat(() => {});
+  await settle();
+  assert.equal(sockets.length, 2);
+  sockets[1].message({ metadata: { message_type: 'session_welcome' }, payload: { session: { id: 'retry' } } });
+  await settle();
+  resolveSubscription(response({ data: [] }, 202));
+  const off = await retry;
+  assert.equal(registrations, 2);
+  off();
+  await adapter.disconnect();
+});
+
+test('temporary validation outages preserve credentials for a retry without browser authorization', async () => {
+  let validations = 0, opened = 0, clears = 0;
+  const adapter = new RealTwitchAdapter({
+    clientId: 'client', openExternal: async () => { opened++; },
+    tokenStore: { load: async () => tokens, save: async () => {}, clear: async () => { clears++; } },
+    fetch: async input => {
+      if (String(input).endsWith('/validate')) {
+        validations++;
+        return validations === 1 ? response({}, 503) : response({ client_id: 'client', user_id: '42', scopes: TWITCH_SCOPES });
+      }
+      return response({ data: [{ id: '42', display_name: 'Streamer' }] });
+    },
+  });
+  await assert.rejects(adapter.connect(), /503/);
+  assert.equal(clears, 0);
+  await adapter.connect();
+  assert.equal((await adapter.getChannel()).broadcasterId, '42');
+  assert.equal(opened, 0);
+  await adapter.disconnect();
+});
+
+test('temporary token refresh failures preserve the refresh token; invalid refresh ends the session', async () => {
+  let refreshes = 0, clears = 0, stored: TwitchTokens | null = tokens;
+  const adapter = new RealTwitchAdapter({
+    clientId: 'client', openExternal: async () => {},
+    tokenStore: { load: async () => stored, save: async value => { stored = value; }, clear: async () => { stored = null; clears++; } },
+    fetch: async input => {
+      const url = String(input);
+      if (url.endsWith('/validate')) return response({ client_id: 'client', user_id: '42', scopes: TWITCH_SCOPES });
+      if (url.endsWith('/users')) return response({ data: [{ id: '42', display_name: 'Streamer' }] });
+      if (url.endsWith('/token')) { refreshes++; return response({}, refreshes === 1 ? 503 : 400); }
+      return response({}, 401);
+    },
+  });
+  await adapter.connect();
+  await assert.rejects(adapter.updateMetadata({ title: 'Title' }), /503/);
+  assert.equal(clears, 0);
+  assert.deepEqual(stored, tokens);
+  await assert.rejects(adapter.updateMetadata({ title: 'Title' }), /expired/);
+  assert.equal(stored, null);
+  await assert.rejects(adapter.getChannel(), /Connect Twitch/);
+  await adapter.disconnect();
+});
+
+test('corrupted saved credentials are cleared and replaced through device authorization', async () => {
+  let opened = 0, clears = 0;
+  const adapter = new RealTwitchAdapter({
+    clientId: 'client', openExternal: async () => { opened++; }, sleep: async () => {},
+    tokenStore: {
+      load: async () => ({ access_token: '' }) as TwitchTokens,
+      save: async () => {}, clear: async () => { clears++; },
+    },
+    fetch: async input => {
+      const url = String(input);
+      if (url.endsWith('/device')) return response({ device_code: 'private', user_code: 'PUBLIC', verification_uri: 'https://www.twitch.tv/activate', expires_in: 100, interval: 1 });
+      if (url.endsWith('/token')) return response(tokens);
+      if (url.endsWith('/validate')) return response({ client_id: 'client', user_id: '42', scopes: TWITCH_SCOPES });
+      return response({ data: [{ id: '42', display_name: 'Streamer' }] });
+    },
+  });
+  await adapter.connect();
+  assert.equal(opened, 1);
+  assert.equal(clears, 1);
+  assert.equal((await adapter.getChannel()).broadcasterId, '42');
+  await adapter.disconnect();
+});
+
+test('hourly validation stops the session but preserves credentials during an outage', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let validations = 0, clears = 0;
+  const adapter = new RealTwitchAdapter({
+    clientId: 'client', openExternal: async () => {},
+    tokenStore: { load: async () => tokens, save: async () => {}, clear: async () => { clears++; } },
+    fetch: async input => {
+      if (String(input).endsWith('/validate')) {
+        validations++;
+        return validations === 1 ? response({ client_id: 'client', user_id: '42', scopes: TWITCH_SCOPES }) : response({}, 503);
+      }
+      return response({ data: [{ id: '42', display_name: 'Streamer' }] });
+    },
+  });
+  await adapter.connect();
+  t.mock.timers.tick(60 * 60 * 1000);
+  await settle();
+  await assert.rejects(adapter.getChannel(), /Connect Twitch/);
+  assert.equal(clears, 0);
+  await adapter.disconnect();
+});
+
+test('concurrent connections and chat subscriptions share one authenticated EventSub session', async () => {
+  const h = harness();
+  await Promise.all([h.adapter.connect(), h.adapter.connect()]);
+  assert.equal(h.calls.filter(call => call.url.endsWith('/validate')).length, 1);
+  assert.equal(h.calls.filter(call => call.url.endsWith('/users')).length, 1);
+  const first = h.adapter.subscribeChat(() => {});
+  const second = h.adapter.subscribeChat(() => {});
+  await settle();
+  assert.equal(h.sockets.length, 1);
+  h.sockets[0].message({ metadata: { message_type: 'session_welcome' }, payload: { session: { id: 'shared' } } });
+  const [offFirst, offSecond] = await Promise.all([first, second]);
+  assert.equal(h.calls.filter(call => call.url.endsWith('/eventsub/subscriptions')).length, 1);
+  let closed = false;
+  h.sockets[0].on('close', () => { closed = true; });
+  offFirst();
+  assert.equal(closed, false);
+  offSecond();
+  assert.equal(closed, true);
+  await h.adapter.disconnect();
 });

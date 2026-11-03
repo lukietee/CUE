@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { _electron } from 'playwright';
+import { _electron, type ElectronApplication } from 'playwright';
 import electronPath from 'electron';
 import { authenticationResponse } from '../packages/obs/transport.ts';
 
@@ -39,16 +39,29 @@ server.on('connection', socket => {
 const scratch = await mkdtemp(path.join(tmpdir(), 'cue-obs-settings-'));
 const bootstrap = path.join(scratch, 'bootstrap.cjs');
 await writeFile(bootstrap, `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(path.join(scratch, 'profile'))});\nimport(${JSON.stringify(pathToFileURL(path.resolve('dist-electron/main.js')).href)});\n`);
-const env: Record<string, string> = { ...process.env, CUE_DEMO_MODE: 'true', CUE_OVERLAY_PORT: '0' };
+const rememberConnections = process.env.CUE_REMEMBER_CONNECTIONS === 'true';
+const env: Record<string, string> = { ...process.env, CUE_DEMO_MODE: 'true', CUE_OVERLAY_PORT: '0', CUE_REMEMBER_CONNECTIONS: String(rememberConnections) };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.CUE_DEV_URL;
-const app = await _electron.launch({ executablePath: electronPath as unknown as string, args: [bootstrap], env });
-const page = await app.firstWindow();
-page.setDefaultTimeout(10000);
-try {
+let app: ElectronApplication | undefined;
+async function launch() {
+  app = await _electron.launch({ executablePath: electronPath as unknown as string, args: [bootstrap], env });
+  const page = await app.firstWindow();
+  page.setDefaultTimeout(10000);
   await page.waitForFunction(() => Boolean(window.cue));
+  return page;
+}
+async function closeApp() {
+  const current = app;
+  app = undefined;
+  if (!current) return;
+  await current.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach(win => win.destroy())).catch(() => {});
+  await current.close().catch(() => {});
+}
+try {
+  let page = await launch();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  const field = page.getByLabel('WebSocket password', { exact: true });
+  let field = page.getByLabel('WebSocket password', { exact: true });
   await field.fill('demo-password');
   await page.getByRole('checkbox', { name: /^Demo Mode/ }).uncheck();
   await page.waitForFunction(async () => !(await window.cue!.getSnapshot()).settings.demo);
@@ -74,17 +87,75 @@ try {
   assert.equal(await field.getAttribute('type'), 'password');
   await page.getByRole('button', { name: 'Connect OBS', exact: true }).click();
   await page.waitForFunction(async () => (await window.cue!.getSnapshot()).obs.connected);
+  await page.waitForFunction(() => document.querySelector<HTMLInputElement>('#obs-websocket-password')?.value === '');
   assert.equal(await field.inputValue(), '', 'A successful connection clears the form password.');
+  // Keychain-backed persistence is tested only after an explicit shell opt-in.
+  const encryptionAvailable = rememberConnections && await app!.evaluate(({ safeStorage }) => safeStorage.isEncryptionAvailable());
+  const setup = await page.evaluate(() => window.cue!.getSetupStatus());
+  assert.equal(setup.rememberConnections, rememberConnections);
+  assert.equal(setup.obsCredentialsSaved, encryptionAvailable);
+  assert.equal(setup.obsHost, '127.0.0.1');
+  assert.equal(setup.obsPort, address.port);
+  if (encryptionAvailable) {
+    const credentials = path.join(scratch, 'profile', 'obs-credentials.enc');
+    assert.equal((await readFile(credentials)).includes(Buffer.from(password)), false, 'Saved credentials must not contain the plaintext password.');
+    if (process.platform !== 'win32') assert.equal((await stat(credentials)).mode & 0o777, 0o600);
+    await closeApp();
+    page = await launch();
+    await page.waitForFunction(async () => (await window.cue!.getSnapshot()).obs.connected);
+    assert.equal(await page.evaluate(async () => (await window.cue!.getSnapshot()).settings.demo), false);
+    const restored = await page.evaluate(() => window.cue!.getSetupStatus());
+    assert.equal(restored.rememberConnections, true);
+    assert.equal(restored.obsCredentialsSaved, true);
+    assert.equal(restored.obsHost, '127.0.0.1');
+    assert.equal(restored.obsPort, address.port);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    field = page.getByLabel('WebSocket password', { exact: true });
+    assert.equal(await field.inputValue(), '', 'Automatic reconnection must not expose the saved password.');
+    assert.equal(await page.getByLabel('Host', { exact: true }).inputValue(), '127.0.0.1');
+    assert.equal(await page.getByLabel('Port', { exact: true }).inputValue(), String(address.port));
+    console.log('Encrypted OBS credentials survived restart and reconnected without exposing the password.');
+  } else if (rememberConnections) {
+    console.log('OS credential encryption unavailable; connection retry passed, persistence checks skipped.');
+  } else {
+    const credentials = path.join(scratch, 'profile', 'obs-credentials.enc');
+    await assert.rejects(readFile(credentials), { code: 'ENOENT' });
+    await closeApp();
+    page = await launch();
+    assert.equal(await page.evaluate(async () => (await window.cue!.getSnapshot()).settings.demo), false);
+    assert.equal(await page.evaluate(async () => (await window.cue!.getSnapshot()).obs.connected), false, 'Memory-only connections must require reconnection after restart.');
+    const restored = await page.evaluate(() => window.cue!.getSetupStatus());
+    assert.equal(restored.rememberConnections, false);
+    assert.equal(restored.obsCredentialsSaved, false);
+    await assert.rejects(readFile(credentials), { code: 'ENOENT' });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    field = page.getByLabel('WebSocket password', { exact: true });
+    assert.equal(await field.inputValue(), '');
+    await page.getByLabel('Port', { exact: true }).fill(String(address.port));
+    await page.getByRole('button', { name: 'Connect OBS', exact: true }).click();
+    await page.getByText('Could not connect to OBS.', { exact: false }).waitFor();
+    assert.equal(await page.evaluate(async () => (await window.cue!.getSnapshot()).obs.connected), false, 'A restart must not reuse a memory-only password.');
+    await field.fill(password);
+    await page.getByRole('button', { name: 'Connect OBS', exact: true }).click();
+    await page.waitForFunction(async () => (await window.cue!.getSnapshot()).obs.connected);
+    await page.waitForFunction(() => document.querySelector<HTMLInputElement>('#obs-websocket-password')?.value === '');
+    assert.equal(await page.evaluate(async () => (await window.cue!.getSetupStatus()).obsCredentialsSaved), false);
+    await assert.rejects(readFile(credentials), { code: 'ENOENT' });
+    console.log('Default memory-only mode wrote no credentials and required the password again after restart.');
+  }
   await page.getByRole('button', { name: 'Disconnect OBS', exact: true }).click();
   await page.waitForFunction(async () => !(await window.cue!.getSnapshot()).obs.connected);
+  await page.waitForFunction(async () => !(await window.cue!.getSetupStatus()).obsCredentialsSaved);
+  assert.equal(await page.evaluate(async () => (await window.cue!.getSetupStatus()).obsCredentialsSaved), false, 'Manual disconnect must forget saved credentials.');
+  await assert.rejects(readFile(path.join(scratch, 'profile', 'obs-credentials.enc')), { code: 'ENOENT' });
   await field.fill('retry-after-disconnect');
   assert.equal(await field.inputValue(), 'retry-after-disconnect');
   await page.screenshot({ path: path.join(scratch, 'obs-settings.png') });
   console.log('OBS settings check passed: Demo Mode transition, typing, failed authentication, password retry, connection and disconnect.');
   console.log(`Screenshot: ${scratch}/obs-settings.png`);
 } finally {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach(win => win.destroy())).catch(() => {});
-  await app.close();
+  await closeApp();
   for (const socket of server.clients) socket.terminate();
   await new Promise<void>(resolve => server.close(() => resolve()));
+  await rm(path.join(scratch, 'profile'), { recursive: true, force: true });
 }

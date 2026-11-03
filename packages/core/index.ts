@@ -166,14 +166,21 @@ export class CueService extends EventEmitter {
     this.state.settings.mode = parsed.mode;
     this.event('plan.saved', { title: parsed.title });
   }
+  private clearConnectionError(service: 'obs' | 'twitch') {
+    const pattern = service === 'obs' ? /\bOBS\b/i : /\b(Twitch|OAuth|EventSub)\b|TWITCH_CLIENT_ID/i;
+    if (this.state.error && pattern.test(this.state.error)) this.state.error = null;
+  }
   async connectTwitch() {
+    this.state.twitch = { connected: false, displayName: '' };
     await this.deps.twitch.connect();
     const channel = await this.deps.twitch.getChannel();
-    this.state.twitch = { connected: true, displayName: channel.displayName };
     this.unsubscribe?.();
+    this.unsubscribe = undefined;
     this.unsubscribe = await this.deps.twitch.subscribeChat((m) => {
       this.ingestChat(m.id, m.user, m.text, m.ts).catch((e) => this.reportError(e));
     });
+    this.state.twitch = { connected: true, displayName: channel.displayName };
+    this.clearConnectionError('twitch');
     this.event('twitch.connected', { displayName: channel.displayName });
     return { displayName: channel.displayName };
   }
@@ -188,6 +195,8 @@ export class CueService extends EventEmitter {
       scenes,
       scene: (await obs.getCurrentScene?.()) ?? scenes[0] ?? '',
     };
+    this.state.overlay.staged = false;
+    this.clearConnectionError('obs');
     this.event('obs.connected', { scene: this.state.obs.scene });
   }
   async refreshProductionState() {
@@ -197,6 +206,10 @@ export class CueService extends EventEmitter {
       const adapter = this.deps.obs as ObsAdapter & { getCurrentScene?: () => Promise<string> };
       const scene = (await adapter.getCurrentScene?.()) ?? this.state.obs.scene;
       if (active !== this.state.obs.streaming || scene !== this.state.obs.scene) {
+        if (scene !== this.state.obs.scene) {
+          this.state.overlay.staged = false;
+          if (this.state.status === 'live') this.state.paused = true;
+        }
         this.state.obs.streaming = active;
         this.state.obs.scene = scene;
         if (!active && this.state.status === 'live') this.state.paused = true;
@@ -204,19 +217,13 @@ export class CueService extends EventEmitter {
       }
     } catch (error) {
       this.state.obs.connected = false;
+      this.state.overlay.staged = false;
       this.state.paused = true;
       this.reportError(error);
     }
   }
   async checkReadiness(): Promise<ReadinessReport> {
-    if (this.state.obs.connected) {
-      try {
-        this.state.obs.streaming = (await this.deps.obs.getStreamStatus()).active;
-      } catch (e) {
-        this.state.obs.connected = false;
-        this.reportError(e);
-      }
-    }
+    await this.refreshProductionState();
     const checks = [
       {
         name: 'Stream plan',
@@ -241,6 +248,7 @@ export class CueService extends EventEmitter {
     ];
     const ready = checks.every((c) => c.ok);
     if (this.state.status === 'draft' && ready) this.state.status = 'ready';
+    else if (this.state.status === 'ready' && !ready) this.state.status = 'draft';
     this.publish();
     return { ready, checks };
   }
@@ -267,7 +275,10 @@ export class CueService extends EventEmitter {
   }
   async stageOverlay() {
     if (!this.state.obs.connected) throw Error('Connect OBS first');
+    this.state.overlay.staged = false;
     await this.deps.obs.ensureOverlaySource(this.deps.overlay.url);
+    const adapter = this.deps.obs as ObsAdapter & { getCurrentScene?: () => Promise<string> };
+    this.state.obs.scene = (await adapter.getCurrentScene?.()) ?? this.state.obs.scene;
     this.state.overlay.staged = true;
     this.event('overlay.staged', { url: this.deps.overlay.url });
   }

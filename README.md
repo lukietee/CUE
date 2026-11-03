@@ -40,6 +40,18 @@ npm start
 
 Copy `.env.example` to `.env` and set `TWITCH_CLIENT_ID` to your own **public** Twitch application's client ID. No client secret is distributed. Register a public client with device authorization support in the Twitch Developer Console. Switch off Demo Mode in Settings and reconnect both services.
 
+On macOS, build and install the native app with:
+
+```sh
+npm run install:mac
+```
+
+The installer puts CUE in `~/Applications/CUE.app`, backs up an existing copy, and copies only CUE runtime configuration to a private `config.env` in the app's user-data directory. Credentials stay outside the app bundle. You can then launch CUE directly from Finder without Terminal. The installer preserves the existing `Electron` user-data directory when migrating a prior installation.
+
+Connections are **session-only by default**, so startup does not access macOS Keychain. To save OAuth and OBS credentials between launches, explicitly enable **Remember connections on this Mac** in Settings. macOS may ask for your Mac login/Keychain password. With remembering enabled and access allowed, CUE can reconnect OBS and update the overlay URL after restart; it never starts broadcasting automatically. With it off, reconnect the services after closing CUE. An OpenAI API key in the private runtime configuration still loads normally.
+
+Settings displays whether your Twitch client and optional AI planner are configured. `CUE_CONFIG_PATH` can select a different runtime configuration file. Development runs also read the checkout's `.env`; packaged apps read the private user-data configuration, independent of their working directory.
+
 - Twitch opens the official device authorization page in your browser. Enter the public code displayed in CUE. It requests `user:read:chat` and `channel:manage:broadcast`, validates the user identity, and subscribes to your channel's EventSub chat. See [Twitch setup](packages/twitch/README.md).
 - Enable **Tools → WebSocket Server Settings** in OBS Studio 28+; enter the local host, port (usually 4455), and password in Settings. Staging creates/reuses **CUE Overlay** in the current scene. Configure your OBS stream destination yourself. See [OBS setup](packages/obs/README.md).
 - **Go live starts OBS broadcasting to its configured destination.** It always requires a native confirmation. OBS connectivity and actual broadcasting are displayed separately. Quitting CUE does not stop OBS.
@@ -50,9 +62,9 @@ Metadata is applied only after the app's explicit preview/approval. Category nam
 
 ## State and security
 
-Electron's main process owns adapters, credentials, policy, SQLite and the overlay server. The sandboxed renderer gets a fixed typed bridge; it cannot send generic IPC or access Node. OAuth credentials use OS-backed Electron `safeStorage` encryption; if unavailable, tokens stay memory-only. OBS passwords remain in main-process memory after connection. Model keys stay in environment configuration. Secrets are not placed in SQLite.
+Electron's main process owns adapters, credentials, policy, SQLite and the overlay server. The sandboxed renderer gets a fixed typed bridge; it cannot send generic IPC or access Node. OAuth credentials stay in memory by default. Explicitly remembered connections use OS-backed Electron `safeStorage` encryption, including saved OBS passwords; startup does not access Keychain unless remembering was enabled. OBS passwords remain in main-process memory after connection unless the user explicitly opts into encrypted remembering. Model keys stay in environment configuration. Secrets are not placed in SQLite.
 
-Session plans, events, decisions and results persist in `cue.sqlite` under Electron's application user-data directory. Restarting an active session restores its audit history with automation paused. Reconnect OBS, restage the overlay, check actual broadcasting and explicitly resume. Delete history in Settings to remove local sessions and disconnect stored Twitch credentials. Environment configuration is managed separately.
+Session plans, events, decisions and results persist in `cue.sqlite` under Electron's application user-data directory. Restarting an active session restores its audit history with automation paused. Reconnect OBS, restage the overlay if needed, check actual broadcasting and explicitly resume. Remembered OBS connections can reconnect and restage automatically, with automation still paused. Delete history in Settings to remove local sessions and disconnect stored Twitch credentials. Environment configuration is managed separately.
 
 See [security boundaries](docs/SECURITY.md), [typed API](docs/API.md), [demo rehearsal](docs/DEMO.md), and [implementation status](docs/IMPLEMENTATION.md).
 

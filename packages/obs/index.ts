@@ -135,6 +135,8 @@ export class RealObsAdapter implements ObsAdapter {
     const { inputSettings } = await this.client.call('GetInputSettings', { inputName });
     if (inputSettings.url !== url)
       throw new Error('OBS did not confirm the overlay URL. Try staging again.');
+    if ((await this.getCurrentScene()) !== sceneName)
+      throw new Error('The OBS program scene changed while staging. Stage the overlay again in the current scene.');
   }
   async switchScene(sceneName: string) {
     this.check();

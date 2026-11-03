@@ -6,6 +6,7 @@ import type {
   DirectorMode,
   ReadinessReport,
   SessionRecap,
+  SetupStatus,
   StreamPlan,
 } from '../../../packages/shared/index';
 import './styles.css';
@@ -149,6 +150,12 @@ function download(name: string, content: string, type: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
+function userError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/^(?:Error:\s*)?Error invoking remote method '[^']+':\s*/, '')
+    .replace(/^Error:\s*/, '');
+}
 function loadBriefDraft() {
   try {
     return localStorage.getItem('cue.streamBrief')?.slice(0, 4000) ?? '';
@@ -172,7 +179,10 @@ function App() {
     [obs, setObs] = useState({ host: '127.0.0.1', port: 4455, password: '' }),
     [tick, setTick] = useState(Date.now());
   const obsPasswordRef = useRef<HTMLInputElement>(null);
+  const obsEndpointEdited = useRef(false);
   const [showObsPassword, setShowObsPassword] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [mountedAt] = useState(Date.now);
   const [authorizationStartedAt, setAuthorizationStartedAt] = useState(0);
   const [dismissedBackendError, setDismissedBackendError] = useState('');
   const planSignature = JSON.stringify(snapshot?.plan ?? null);
@@ -181,6 +191,7 @@ function App() {
     : '';
   const visibleError =
     error || (backendErrorSignature !== dismissedBackendError ? snapshot?.error : null);
+  const displayedError = visibleError ? userError(visibleError) : null;
   const api = window.cue;
   useEffect(() => {
     try {
@@ -189,11 +200,16 @@ function App() {
       /* Local storage can be unavailable in restricted previews. */
     }
   }, [brief]);
-  const authorization = snapshot?.events.findLast(
-    (e) => e.kind === 'twitch.authorization' && Date.parse(e.ts) >= authorizationStartedAt,
+  const authorizationIndex = snapshot?.events.findLastIndex(
+    (e) => e.kind === 'twitch.authorization' &&
+      Date.parse(e.ts) >= Math.max(mountedAt, authorizationStartedAt),
+  ) ?? -1;
+  const authorization = authorizationIndex >= 0 ? snapshot?.events[authorizationIndex] : undefined;
+  const authorizationEnded = snapshot?.events.slice(authorizationIndex + 1).some(
+    (e) => ['twitch.connected', 'twitch.disconnected', 'error'].includes(e.kind),
   );
   const authorizationPending =
-    busy === 'Connecting Twitch' && !snapshot?.twitch.connected && authorization;
+    authorization && !snapshot?.twitch.connected && !authorizationEnded;
   useEffect(() => {
     if (!api) {
       setError('Open CUE in the desktop app to connect to your production service.');
@@ -210,7 +226,20 @@ function App() {
           else if (s.plan) setView(s.status === 'ended' ? 'recap' : 'setup');
         }
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(userError(e)));
+    if (api.getSetupStatus)
+      void api.getSetupStatus().then((status) => {
+        if (!active) return;
+        setSetupStatus(status);
+        if (!obsEndpointEdited.current)
+          setObs((previous) => ({
+            ...previous,
+            host: status.obsHost || '127.0.0.1',
+            port: status.obsPort || 4455,
+          }));
+      }).catch(() => {
+        if (active) setSetupStatus(null);
+      });
     const off = api.onSnapshot((s) => {
       if (active) setSnapshot(s);
     });
@@ -261,18 +290,32 @@ function App() {
       api
         .getRecap(snapshot.sessionId)
         .then(setRecap)
-        .catch((e) => setError(String(e)));
+        .catch((e) => setError(userError(e)));
   }, [view, snapshot?.status, snapshot?.sessionId, api]);
+  useEffect(() => {
+    setReadiness(null);
+  }, [
+    snapshot?.sessionId,
+    snapshot?.settings.demo,
+    snapshot?.twitch.connected,
+    snapshot?.obs.connected,
+    snapshot?.obs.scene,
+    snapshot?.overlay.staged,
+    snapshot?.plan?.id,
+  ]);
   const run = async (label: string, fn: () => Promise<unknown>) => {
     if (busy) return;
     if (label === 'Connecting Twitch') setAuthorizationStartedAt(Date.now());
     setBusy(label);
     setError('');
+    setDismissedBackendError(backendErrorSignature);
     setNotice('');
     try {
       await fn();
+      if (api?.getSetupStatus)
+        void api.getSetupStatus().then(setSetupStatus).catch(() => setSetupStatus(null));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(userError(e));
     } finally {
       setBusy('');
     }
@@ -343,7 +386,10 @@ function App() {
     ['live', 'live', 'Live production'],
     ['recap', 'recap', 'Session recap'],
   ] as const;
-  const updatePlan = (patch: Partial<StreamPlan>) => setDraft((p) => (p ? { ...p, ...patch } : p));
+  const updatePlan = (patch: Partial<StreamPlan>) => {
+    setReadiness(null);
+    setDraft((p) => (p ? { ...p, ...patch } : p));
+  };
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -427,9 +473,9 @@ function App() {
             </div>
           </div>
         </header>
-        {visibleError && (
+        {displayedError && (
           <div className="alert error" role="alert">
-            <span>{visibleError}</span>
+            <span>{displayedError}</span>
             <button
               aria-label="Dismiss error"
               onClick={() => {
@@ -468,7 +514,7 @@ function App() {
                   void api!
                     .disconnect('twitch')
                     .catch((error: unknown) =>
-                      setError(error instanceof Error ? error.message : String(error)),
+                      setError(userError(error)),
                     );
                 }}
               >
@@ -976,7 +1022,7 @@ function App() {
                       />
                       <button
                         className="secondary full"
-                        disabled={!!busy || !api || snapshot?.twitch.connected}
+                        disabled={!!busy || !api || snapshot?.twitch.connected || !!authorizationPending}
                         onClick={() => void run('Connecting Twitch', () => api!.connectTwitch())}
                       >
                         {snapshot?.twitch.connected ? 'Twitch connected' : 'Connect Twitch'}
@@ -1377,7 +1423,7 @@ function App() {
                             void api!
                               .pauseDirector(!snapshot.paused)
                               .catch((error: unknown) =>
-                                setError(error instanceof Error ? error.message : String(error)),
+                                setError(userError(error)),
                               );
                           }}
                         >
@@ -1572,6 +1618,35 @@ function App() {
                       <h2>Connections</h2>
                       <Icon name="link" />
                     </div>
+                    {setupStatus && api?.setRememberConnections && (
+                      <>
+                        <label className="toggle-row remember-connections">
+                          <span>
+                            Remember connections on this Mac
+                            <small>Uses macOS Keychain. Leave off to keep credentials only while CUE is open.</small>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={setupStatus.rememberConnections}
+                            disabled={!!busy}
+                            onChange={(e) => {
+                              const enabled = e.target.checked;
+                              void run('Updating connection storage', async () => {
+                                setSetupStatus(await api.setRememberConnections(enabled));
+                                setNotice(enabled
+                                  ? 'Connections will be remembered on this Mac.'
+                                  : 'Session-only connections. Credentials will not be saved.');
+                              });
+                            }}
+                          />
+                        </label>
+                        <p className="setup-status">
+                          {setupStatus.rememberConnections
+                            ? 'Connection storage enabled on this Mac.'
+                            : 'Session-only connections'}
+                        </p>
+                      </>
+                    )}
                     <ConnectionRow
                       icon="twitch"
                       title="Twitch"
@@ -1584,7 +1659,7 @@ function App() {
                     />
                     <button
                       className="secondary"
-                      disabled={!!busy}
+                      disabled={!!busy || !!authorizationPending}
                       onClick={() =>
                         void run(
                           snapshot.twitch.connected ? 'Disconnecting Twitch' : 'Connecting Twitch',
@@ -1597,6 +1672,16 @@ function App() {
                     >
                       {snapshot.twitch.connected ? 'Disconnect Twitch' : 'Connect Twitch'}
                     </button>
+                    {!snapshot.settings.demo && setupStatus && (
+                      <p className={`setup-status ${setupStatus.twitchConfigured ? 'ready' : ''}`}>
+                        <Icon name={setupStatus.twitchConfigured ? 'check' : 'clock'} size={14} />
+                        <span>
+                          {setupStatus.twitchConfigured
+                            ? 'Twitch app configured. Connect to authorize your channel.'
+                            : 'Twitch app configuration is missing. Add its Client ID and restart CUE before connecting.'}
+                        </span>
+                      </p>
+                    )}
                     <div className="divider" />
                     <ConnectionRow
                       icon="obs"
@@ -1609,7 +1694,11 @@ function App() {
                         Host
                         <input
                           value={obs.host}
-                          onChange={(e) => setObs({ ...obs, host: e.target.value })}
+                          onChange={(e) => {
+                            const host = e.target.value;
+                            obsEndpointEdited.current = true;
+                            setObs((previous) => ({ ...previous, host }));
+                          }}
                           placeholder="127.0.0.1"
                         />
                       </label>
@@ -1620,7 +1709,11 @@ function App() {
                           value={obs.port}
                           min={1}
                           max={65535}
-                          onChange={(e) => setObs({ ...obs, port: Number(e.target.value) })}
+                          onChange={(e) => {
+                            const port = Number(e.target.value);
+                            obsEndpointEdited.current = true;
+                            setObs((previous) => ({ ...previous, port }));
+                          }}
                         />
                       </label>
                     </div>
@@ -1635,7 +1728,9 @@ function App() {
                         aria-describedby="obs-password-help"
                         value={obs.password}
                         onChange={(e) => setObs({ ...obs, password: e.target.value })}
-                        placeholder="Paste your OBS WebSocket password"
+                        placeholder={setupStatus?.obsCredentialsSaved
+                          ? 'Saved password — leave blank to reconnect'
+                          : 'Paste your OBS WebSocket password'}
                       />
                       <button
                         type="button"
@@ -1678,8 +1773,16 @@ function App() {
                     <p id="obs-password-help" className="fineprint left">
                       {snapshot.obs.connected
                         ? 'Connected. The password was cleared from this form. Disconnect before applying new connection details.'
-                        : 'Use the server password from OBS → Tools → WebSocket Server Settings → Show Connect Info.'}
+                        : setupStatus?.obsCredentialsSaved
+                          ? 'Leave the password blank to reconnect to the same host and port, or enter a new WebSocket password.'
+                          : 'Use the server password from OBS → Tools → WebSocket Server Settings → Show Connect Info.'}
                     </p>
+                    {setupStatus?.obsCredentialsSaved && !snapshot.settings.demo && (
+                      <p className="setup-status ready">
+                        <Icon name="check" size={14} />
+                        <span>Your OBS connection details are saved securely on this computer.</span>
+                      </p>
+                    )}
                   </section>
                   <div>
                     <section className="panel">
@@ -1784,6 +1887,24 @@ function App() {
                         </p>
                       </div>
                     </section>
+                    {!snapshot.settings.demo && setupStatus && (
+                      <section className="panel planning-status">
+                        <h2>Stream planning</h2>
+                        <p className="setup-status ready">
+                          <Icon name="check" size={14} />
+                          <span>
+                            {setupStatus.plannerConfigured
+                              ? `AI planning configured · ${setupStatus.plannerModel}`
+                              : 'Local planning active'}
+                          </span>
+                        </p>
+                        <p className="fineprint left">
+                          {setupStatus.plannerConfigured
+                            ? 'New briefs use the AI planner, with an editable local plan available if the provider cannot respond.'
+                            : 'You can create and edit a complete stream plan without an AI provider.'}
+                        </p>
+                      </section>
+                    )}
                     <section className="panel data-panel">
                       <h2>Local session history</h2>
                       <p>Clear saved plans, events, decisions, and recaps from this device.</p>

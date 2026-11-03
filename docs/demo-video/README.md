@@ -32,3 +32,17 @@ Use `--silent` to produce a captioned preview without ElevenLabs requests. Use `
 No credentials are written to the storyboard, source files, logs, or rendered video.
 
 Co-authored-by: lukietee <lucasnotlukie@gmail.com>
+
+## Animated feature demo
+
+`cue-feature-demo.mp4` (1920 × 1080, 1:52, burned-in captions, plus `cue-feature-demo.srt`) is a narrated motion walkthrough: brief, plan, connect, go live, chat pattern, the cue on the stream, director evidence, creator control, and recap. The narration (`feature-narration.txt`) was generated with ElevenLabs using the voice configured as `ELEVENLABS_VOICE_ID`.
+
+- App panels are real CUE captures from an isolated Demo Mode profile, animated with zooms, highlights and a pointer.
+- The OBS frames are real OBS Studio program output. A temporary scene used a real browser source that pointed at a local CUE overlay server. The cue was acknowledged by that browser source (revision 1, one client). OBS was never streaming, and the temporary scene and sources were removed afterward.
+- The chat is CUE's own Conversation panel showing the Demo Mode chat spike, not footage from Twitch's site. No real Twitch broadcast was used.
+
+## Fast-paced cut
+
+`cue-demo-fast.mp4` (1920 × 1080, 0:55, plus `cue-demo-fast.srt`) is a quicker edit of the feature demo. It uses the same real CUE captures and real OBS output, with tighter ElevenLabs narration (`fast-narration.txt`), word-slam transitions, and scene cuts aligned to the music's ~119 BPM beat. The music ducks automatically under the voice.
+
+Music: “Jingle Bells” by Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). The credit also appears in the video's closing frame.
