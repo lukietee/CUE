@@ -1,0 +1,21 @@
+This is CUE, a producer for solo livestreamers. It plans your show, listens to your chat, and puts the right moment on screen.
+
+Start with one line: an IRL city walk where chat picks the next challenge. Choose a directing style, and CUE drafts the show.
+
+You get an editable run of show. Title, category, tags, and timed segments, all yours to change before you go live.
+
+Connect Twitch for chat and channel details. Connect OBS over its local WebSocket, and stage CUE's transparent overlay right in your scene.
+
+Going live always takes your confirmation. CUE never starts a broadcast on its own.
+
+Now chat starts talking. Viewers keep asking for a challenge. CUE's director spots the pattern, checks your permissions and cooldown, and decides to bring chat into the show.
+
+The cue lands in OBS as a real overlay on your stream, and the overlay server confirms the browser source received it.
+
+Every decision is explained in the director feed: what it observed, why it acted, and the chat messages behind it.
+
+And you stay in control. Pause the director, switch its style, or set how often it's allowed to cue.
+
+When the show ends, CUE saves a recap with highlights and tips for next time, ready to export.
+
+CUE. Your stream, right on cue.
