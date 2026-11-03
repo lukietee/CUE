@@ -13,7 +13,7 @@ export function createPlan(brief: string, mode: DirectorMode): StreamPlan {
     id: randomUUID(),
     brief,
     title: brief.trim().replace(/\s+/g, ' ').slice(0, 100),
-    categoryName: gaming ? 'Games + Demos' : 'Just Chatting',
+    categoryName: 'Just Chatting',
     tags: ['English', gaming ? 'Gaming' : 'Interactive', 'Community'],
     mode,
     segments: [

@@ -37,6 +37,8 @@ export class RealTwitchAdapter implements TwitchAdapter {
   private tokens: TwitchTokens | null = null;
   private channel: { broadcasterId: string; displayName: string } | null = null;
   private listeners = new Set<(message: ChatMessage) => void>();
+  private chatReady = false;
+  private chatWaiters = new Set<{ resolve: () => void; reject: (error: Error) => void }>();
   private sockets = new Set<WebSocket>();
   private current: WebSocket | null = null;
   private keepalive: ReturnType<typeof setTimeout> | null = null;
@@ -80,9 +82,14 @@ export class RealTwitchAdapter implements TwitchAdapter {
   async connect(): Promise<void> {
     if (this.connecting) return this.connecting;
     if (this.channel && !this.stopped) return;
-    this.connecting = this.connectInternal().finally(() => {
-      this.connecting = null;
-    });
+    this.connecting = this.connectInternal()
+      .catch(async (error) => {
+        await this.stop(false);
+        throw error;
+      })
+      .finally(() => {
+        this.connecting = null;
+      });
     return this.connecting;
   }
   private async connectInternal() {
@@ -93,16 +100,18 @@ export class RealTwitchAdapter implements TwitchAdapter {
     const generation = ++this.generation;
     const restored = await this.options.tokenStore?.load();
     this.assertGeneration(generation);
-    this.tokens = restored ? TokenSchema.parse(restored) : this.tokens;
+    if (restored) {
+      const parsed = TokenSchema.safeParse(restored);
+      if (parsed.success) this.tokens = parsed.data;
+      else {
+        this.tokens = null;
+        await this.clearTokens();
+        this.assertGeneration(generation);
+      }
+    }
     if (!this.tokens) await this.authorize(generation);
     this.assertGeneration(generation);
-    try {
-      await this.validate();
-    } catch (error) {
-      this.tokens = null;
-      await this.clearTokens();
-      throw error;
-    }
+    await this.validate();
     const response = await this.api('/users');
     const body = z
       .object({
@@ -118,7 +127,7 @@ export class RealTwitchAdapter implements TwitchAdapter {
       () => {
         void this.validate().catch((error) => {
           this.report(error);
-          void this.disconnect();
+          void this.stop(false);
         });
       },
       60 * 60 * 1000,
@@ -218,9 +227,11 @@ export class RealTwitchAdapter implements TwitchAdapter {
         refresh_token: this.tokens.refresh_token,
       });
       if (!response.ok) {
-        this.tokens = null;
-        await this.clearTokens();
-        throw new Error('Twitch authorization expired. Reconnect Twitch.');
+        if (response.status === 400 || response.status === 401)
+          return this.invalidateAuthorization('Twitch authorization expired. Reconnect Twitch.');
+        throw new Error(
+          `Twitch token refresh failed (${response.status}). Try connecting again shortly.`,
+        );
       }
       const tokens = TokenSchema.parse(await response.json());
       this.assertGeneration(generation);
@@ -241,16 +252,22 @@ export class RealTwitchAdapter implements TwitchAdapter {
         headers: { Authorization: `OAuth ${this.tokens!.access_token}` },
       });
     }
-    if (!response.ok)
-      throw new Error(`Twitch token validation failed (${response.status}). Reconnect Twitch.`);
+    if (!response.ok) {
+      if (response.status === 401)
+        return this.invalidateAuthorization('Twitch authorization expired. Reconnect Twitch.');
+      throw new Error(
+        `Twitch token validation failed (${response.status}). Try connecting again shortly.`,
+      );
+    }
     const data = z
       .object({ client_id: z.string(), user_id: z.string().min(1), scopes: z.array(z.string()) })
       .parse(await response.json());
     if (
       data.client_id !== this.options.clientId ||
+      (this.channel !== null && data.user_id !== this.channel.broadcasterId) ||
       TWITCH_SCOPES.some((scope) => !data.scopes.includes(scope))
     )
-      throw new Error(
+      return this.invalidateAuthorization(
         'Twitch credentials do not match this app or required scopes. Reconnect Twitch.',
       );
   }
@@ -325,7 +342,19 @@ export class RealTwitchAdapter implements TwitchAdapter {
     await this.getChannel();
     this.assertGeneration(generation);
     this.listeners.add(listener);
-    if (!this.current && !this.reconnectTimer) this.openSocket(EVENTSUB, false);
+    try {
+      if (!this.chatReady) {
+        await new Promise<void>((resolve, reject) => {
+          this.chatWaiters.add({ resolve, reject });
+          if (!this.current && !this.reconnectTimer) this.openSocket(EVENTSUB, false);
+        });
+      }
+      this.assertGeneration(generation);
+    } catch (error) {
+      this.listeners.delete(listener);
+      if (!this.listeners.size) this.closeSockets();
+      throw error;
+    }
     return () => {
       this.listeners.delete(listener);
       if (!this.listeners.size) this.closeSockets();
@@ -384,8 +413,12 @@ export class RealTwitchAdapter implements TwitchAdapter {
               }),
             });
           }
-          if (!this.stopped && this.sockets.has(socket))
+          if (!this.stopped && this.sockets.has(socket)) {
+            this.chatReady = true;
+            for (const waiter of this.chatWaiters) waiter.resolve();
+            this.chatWaiters.clear();
             this.options.onStatus?.('Twitch chat is connected.');
+          }
           return;
         }
         if (type === 'session_reconnect') {
@@ -442,6 +475,9 @@ export class RealTwitchAdapter implements TwitchAdapter {
         for (const fn of this.listeners) fn(normalized);
       })().catch((error) => {
         this.report(error);
+        this.rejectChatWaiters(
+          error instanceof Error ? error : new Error('Twitch chat setup failed.'),
+        );
         socket.close();
       });
     });
@@ -452,6 +488,10 @@ export class RealTwitchAdapter implements TwitchAdapter {
       clearTimeout(handshake);
       this.sockets.delete(socket);
       if (socket === this.current) {
+        this.chatReady = false;
+        this.rejectChatWaiters(
+          new Error('Twitch chat disconnected before subscription completed. Connect again.'),
+        );
         this.current = null;
         if (this.keepalive) clearTimeout(this.keepalive);
         this.scheduleReconnect();
@@ -483,7 +523,13 @@ export class RealTwitchAdapter implements TwitchAdapter {
     );
     this.reconnectTimer.unref?.();
   }
+  private rejectChatWaiters(error: Error) {
+    for (const waiter of this.chatWaiters) waiter.reject(error);
+    this.chatWaiters.clear();
+  }
   private closeSockets() {
+    this.chatReady = false;
+    this.rejectChatWaiters(new Error('Twitch chat connection cancelled.'));
     if (this.keepalive) clearTimeout(this.keepalive);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.keepalive = null;
@@ -492,7 +538,11 @@ export class RealTwitchAdapter implements TwitchAdapter {
     for (const socket of this.sockets) socket.close();
     this.sockets.clear();
   }
-  async disconnect() {
+  private async invalidateAuthorization(message: string): Promise<never> {
+    await this.stop(true);
+    throw new Error(message);
+  }
+  private async stop(clearCredentials: boolean) {
     this.stopped = true;
     this.generation++;
     this.abortController.abort();
@@ -501,9 +551,14 @@ export class RealTwitchAdapter implements TwitchAdapter {
     this.listeners.clear();
     this.closeSockets();
     this.channel = null;
-    this.tokens = null;
-    await this.clearTokens();
+    if (clearCredentials) {
+      this.tokens = null;
+      await this.clearTokens();
+    }
     this.options.onStatus?.('Twitch disconnected.');
+  }
+  async disconnect() {
+    await this.stop(true);
   }
 }
 export { RealTwitchAdapter as TwitchClient };

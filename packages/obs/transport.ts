@@ -11,6 +11,8 @@ type Responses = {
   };
   GetSceneItemList: { sceneItems: { sourceName: string; sceneItemId: number }[] };
   CreateInput: { sceneItemId: number };
+  RemoveInput: Record<string, never>;
+  GetSourceScreenshot: { imageData: string };
   CreateSceneItem: { sceneItemId: number };
   GetInputSettings: { inputSettings: Record<string, unknown> };
   SetInputSettings: Record<string, never>;
@@ -59,6 +61,7 @@ export class NativeObsClient extends EventEmitter implements ObsClient {
       let settled = false;
       const timeout = setTimeout(() => fail(new Error('OBS handshake timed out.')), this.timeoutMs);
       const fail = (error: Error) => {
+        if (this.socket === socket) this.identified = false;
         clearTimeout(timeout);
         if (!settled) {
           settled = true;
@@ -67,14 +70,14 @@ export class NativeObsClient extends EventEmitter implements ObsClient {
         socket.close();
       };
       socket.on('error', () => {
+        if (this.socket !== socket) return;
         this.emit('ConnectionError');
         fail(new Error('OBS WebSocket connection failed.'));
       });
       socket.on('close', () => {
-        if (this.socket === socket) {
-          this.identified = false;
-          this.socket = null;
-        }
+        if (this.socket !== socket) return;
+        this.identified = false;
+        this.socket = null;
         clearTimeout(timeout);
         for (const request of this.pending.values()) {
           clearTimeout(request.timeout);
@@ -88,6 +91,7 @@ export class NativeObsClient extends EventEmitter implements ObsClient {
         this.emit('ConnectionClosed');
       });
       socket.on('message', (raw: Buffer) => {
+        if (this.socket !== socket) return;
         try {
           const packet = JSON.parse(raw.toString());
           if (packet.op === 0) {

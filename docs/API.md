@@ -22,3 +22,5 @@
 A 3-second main-process health loop observes OBS stream status and current scene. Unexpected inactive output pauses directing and surfaces observed state. Reconnect and restage after restart.
 
 The core service injects storage, OBS, Twitch, overlay, and optional model planning dependencies. Unit/integration tests exercise real SQLite and real core policy with mock production adapters and an in-memory overlay transport. Overlay's network test uses actual HTTP/WebSocket clients when loopback permission exists.
+
+`getSetupStatus()` reports configured services and non-secret OBS endpoint details. `setRememberConnections(enabled)` explicitly opts into or out of OS-backed saved connections; default connections are session-only. Neither API returns secrets.

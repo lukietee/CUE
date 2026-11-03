@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { connect } from 'node:net';
 import { WebSocket } from 'ws';
 import { OverlayServer } from './index.ts';
 
@@ -42,6 +43,23 @@ test('overlay rejects unauthorized reads and writes, validates and replays state
     assert.notEqual(server.state?.text, 'mutated');
     ws.close();
     await once(ws, 'close');
+  } finally {
+    await server.close();
+  }
+});
+
+
+test('a malformed WebSocket upgrade cannot crash the overlay server', async () => {
+  const server = new OverlayServer({ port: 0 });
+  await server.start();
+  try {
+    const url = new URL(server.url);
+    const socket = connect(Number(url.port), '127.0.0.1');
+    await once(socket, 'connect');
+    const closed = once(socket, 'close');
+    socket.write(`GET //[ HTTP/1.1\r\nHost: ${url.host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n`);
+    await closed;
+    assert.equal((await fetch(server.url)).status, 200);
   } finally {
     await server.close();
   }

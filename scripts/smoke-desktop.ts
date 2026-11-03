@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,6 +10,7 @@ import { createServer } from 'vite';
 // This check uses real Electron, preload IPC, core, SQLite and the local overlay server.
 // All session state lives in a disposable directory. It never opens a real broadcast.
 const development = process.argv.includes('--dev');
+const packagedBundle = process.argv.find((arg) => arg.startsWith('--app='))?.slice(6);
 let renderRevision = 0;
 const devServer = development
   ? await createServer({
@@ -46,8 +47,10 @@ if (devUrl) environment.CUE_DEV_URL = devUrl;
 else delete environment.CUE_DEV_URL;
 delete environment.ELECTRON_RUN_AS_NODE;
 const application = await _electron.launch({
-  executablePath: electronPath as unknown as string,
-  args: [bootstrap],
+  executablePath: packagedBundle
+    ? path.join(path.resolve(packagedBundle), 'Contents/MacOS/CUE')
+    : (electronPath as unknown as string),
+  args: packagedBundle ? [`--user-data-dir=${path.join(scratch, 'profile')}`] : [bootstrap],
   env: environment,
 });
 const page = await application.firstWindow();
@@ -64,6 +67,18 @@ const shot = async (name: string) => {
 const snapshot = () => page.evaluate(() => window.cue!.getSnapshot());
 try {
   await page.waitForFunction(() => Boolean(window.cue));
+  const identity = await application.evaluate(({ app }) => ({
+    name: app.getName(),
+    userData: app.getPath('userData'),
+    packaged: app.isPackaged,
+  }));
+  assert.equal(identity.name, 'CUE');
+  assert.equal(
+    await realpath(identity.userData),
+    await realpath(path.join(scratch, 'profile')),
+    'Desktop check must never use real session history',
+  );
+  if (packagedBundle) assert.equal(identity.packaged, true);
   assert.equal((await snapshot()).settings.demo, true);
   assert.equal((await snapshot()).status, 'draft');
   // Only this isolated Demo Mode instance auto-accepts native confirmations.

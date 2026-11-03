@@ -115,7 +115,18 @@ export type CueSnapshot = {
   startedAt: string | null;
   error: string | null;
 };
+export type SetupStatus = {
+  twitchConfigured: boolean;
+  plannerConfigured: boolean;
+  plannerModel: string;
+  obsCredentialsSaved: boolean;
+  rememberConnections: boolean;
+  obsHost: string;
+  obsPort: number;
+};
 export interface CueAPI {
+  getSetupStatus(): Promise<SetupStatus>;
+  setRememberConnections(enabled: boolean): Promise<SetupStatus>;
   getSnapshot(): Promise<CueSnapshot>;
   createPlan(brief: string, mode: DirectorMode): Promise<StreamPlan>;
   savePlan(plan: StreamPlan): Promise<void>;

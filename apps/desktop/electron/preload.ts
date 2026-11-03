@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { CueAPI, CueSnapshot, DirectorEvent } from '../../../packages/shared/index.ts';
 const api: CueAPI = {
+  getSetupStatus: () => ipcRenderer.invoke('cue:getSetupStatus'),
+  setRememberConnections: (enabled) => ipcRenderer.invoke('cue:setRememberConnections', enabled),
   getSnapshot: () => ipcRenderer.invoke('cue:getSnapshot'),
   createPlan: (brief, mode) => ipcRenderer.invoke('cue:createPlan', brief, mode),
   savePlan: (plan) => ipcRenderer.invoke('cue:savePlan', plan),

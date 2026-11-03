@@ -16,6 +16,10 @@ test('plan parser validates structured plans and rejects malformed model-shaped 
   const plan = createPlan('Chat chooses a gaming challenge', 'reality_tv');
   assert.ok(plan.segments.length >= 3);
   assert.ok(plan.tags.includes('Gaming'));
+  assert.equal(plan.categoryName, 'Just Chatting');
+  assert.equal(plan.title, 'Chat chooses a gaming challenge');
+  assert.equal(plan.segments[1].name, 'The main challenge');
+  assert.equal(plan.segments[1].goal, 'Chat chooses a gaming challenge');
   assert.deepEqual(parsePlan(plan), plan);
   for (const value of [
     null,

@@ -3,6 +3,9 @@ dist/
 dist-electron/
 .cue-git/
 .env
+.env.*
+!.env.example
 *.sqlite*
 .DS_Store
 packages/shared/offline-types.d.ts
+release/

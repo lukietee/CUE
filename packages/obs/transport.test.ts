@@ -79,3 +79,36 @@ test('native OBS times out unanswered requests', async () => {
   await assert.rejects(client.call('GetStreamStatus'), /timed out/);
   await client.disconnect();
 });
+
+test('late events from a failed OBS connection cannot invalidate its replacement', async () => {
+  const first = new FakeSocket();
+  first.send = (_raw, callback) => { callback?.(); };
+  first.close = () => { first.readyState = 3; };
+  let second: FakeSocket;
+  let attempts = 0;
+  const client = new NativeObsClient(100, () => {
+    attempts++;
+    return (attempts === 1 ? first : (second = new FakeSocket())) as unknown as WebSocket;
+  });
+  const failed = client.connect('ws://127.0.0.1', 'wrong');
+  queueMicrotask(() => first.emit('error', new Error('Authentication failed')));
+  await assert.rejects(failed, /connection failed/);
+  await client.connect('ws://127.0.0.1', 'correct');
+  second!.respond = false;
+  const pending = client.call('GetStreamStatus');
+  const observed = pending.then(value => ({ value }), error => ({ error }));
+  first.emit('close');
+  first.emit('error', new Error('Late failure'));
+  first.emit('message', 'not valid JSON');
+  const request = second!.sent.at(-1);
+  second!.emit('message', JSON.stringify({ op: 7, d: {
+    requestId: request.d.requestId,
+    requestType: request.d.requestType,
+    requestStatus: { result: true, code: 100 },
+    responseData: { outputActive: false },
+  } }));
+  assert.deepEqual(await observed, { value: { outputActive: false } });
+  second!.respond = true;
+  assert.deepEqual(await client.call('GetStreamStatus'), { outputActive: false });
+  await client.disconnect();
+});

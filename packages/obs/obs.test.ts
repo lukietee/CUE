@@ -61,3 +61,29 @@ test('real staging reuses input and scene item across retries and verifies brows
   assert.equal(calls.filter((n) => n === 'CreateSceneItem').length, 0);
   await assert.rejects(obs.ensureOverlaySource('https://example.com'), /local overlay/);
 });
+
+
+test('staging rejects a program scene change instead of claiming a hidden source is ready', async () => {
+  let scene = 'Original scene';
+  const url = 'http://127.0.0.1:4318/?token=test';
+  const fake = {
+    on: () => {},
+    connect: async () => {},
+    disconnect: async () => {},
+    call: async (name: string) => {
+      switch (name) {
+        case 'GetCurrentProgramScene': return { currentProgramSceneName: scene };
+        case 'GetInputList': return { inputs: [] };
+        case 'CreateInput': return { sceneItemId: 1 };
+        case 'GetSceneItemList': return { sceneItems: [{ sourceName: 'CUE Overlay', sceneItemId: 1 }] };
+        case 'GetInputSettings':
+          scene = 'Different scene';
+          return { inputSettings: { url } };
+        default: return {};
+      }
+    },
+  };
+  const obs = new RealObsAdapter({}, fake as unknown as ObsClient);
+  await obs.connect();
+  await assert.rejects(obs.ensureOverlaySource(url), /program scene changed while staging/);
+});

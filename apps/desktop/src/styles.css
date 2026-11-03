@@ -1791,6 +1791,24 @@ select {
   gap: 24px;
   align-items: start;
 }
+.setup-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+.setup-status svg {
+  margin-top: 2px;
+}
+.setup-status.ready svg {
+  color: var(--accent-text);
+}
+.planning-status {
+  margin-top: 24px;
+}
 .settings-layout .divider {
   height: 1px;
   margin: 27px 0;

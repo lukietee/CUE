@@ -11,28 +11,35 @@
     "test": "node --import tsx --test packages/**/*.test.ts",
     "check": "tsc --noEmit",
     "test:desktop": "npm run build && node --import tsx scripts/smoke-desktop.ts",
-    "test:desktop:dev": "npm run build && node --import tsx scripts/smoke-desktop.ts --dev"
+    "test:desktop:dev": "npm run build && node --import tsx scripts/smoke-desktop.ts --dev",
+    "icons": "node --import tsx scripts/build-icons.ts",
+    "package:mac": "npm run icons && npm run build && node --import tsx scripts/package-desktop.ts",
+    "install:mac": "npm run package:mac && node --import tsx scripts/install-desktop.ts",
+    "test:obs-settings": "npm run build && node --import tsx scripts/smoke-obs-settings.ts"
   },
   "dependencies": {
-    "electron": "^39.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "ws": "^8.18.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@types/node": "^22.20.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.18.0",
     "esbuild": "^0.27.0",
     "playwright": "^1.64.1",
+    "sharp": "^0.35.5",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "electron": "^39.0.0"
   },
   "main": "dist-electron/main.js",
   "engines": {
     "node": ">=24"
-  }
+  },
+  "productName": "CUE"
 }
