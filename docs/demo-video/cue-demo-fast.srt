@@ -1,0 +1,43 @@
+1
+00:00:00,150 --> 00:00:03,943
+Meet CUE. The producer for solo streamers.
+
+2
+00:00:04,593 --> 00:00:08,481
+Type one line. Pick a vibe.
+
+3
+00:00:09,131 --> 00:00:13,019
+CUE drafts your run of show. Edit anything.
+
+4
+00:00:13,669 --> 00:00:19,574
+Connect Twitch. Connect OBS. Stage the overlay.
+
+5
+00:00:20,224 --> 00:00:24,111
+Going live? Always your call.
+
+6
+00:00:24,761 --> 00:00:31,675
+Chat wants a challenge. CUE spots the pattern, checks your rules, and makes the call.
+
+7
+00:00:32,325 --> 00:00:36,212
+And it's on stream. Verified.
+
+8
+00:00:36,862 --> 00:00:41,254
+Every cue shows its receipts.
+
+9
+00:00:41,904 --> 00:00:46,296
+Pause it. Restyle it. Rate-limit it.
+
+10
+00:00:46,946 --> 00:00:50,330
+Then grab your recap and export it.
+
+11
+00:00:50,530 --> 00:00:55,130
+CUE. Your stream, right on cue.
