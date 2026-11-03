@@ -34,7 +34,7 @@ try {
 const existingUserData = app.getPath('userData');
 app.setName('CUE');
 app.setPath('userData', existingUserData);
-nativeTheme.themeSource = 'light';
+nativeTheme.themeSource = 'dark';
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererEntry = normalizeRendererEntryUrl(
   process.env.CUE_DEV_URL ?? new URL('../dist/index.html', import.meta.url).href,
@@ -156,7 +156,7 @@ async function boot() {
     minWidth: 1000,
     minHeight: 720,
     show: false,
-    backgroundColor: '#f6f8f5',
+    backgroundColor: '#0e0e10',
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset' as const,
